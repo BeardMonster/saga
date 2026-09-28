@@ -1,0 +1,24 @@
+name: saga-api
+services:
+  api:
+    build:
+      context: .
+      target: dev
+    container_name: saga-api-dev
+    profiles: ["dev"]
+    env_file: [.env]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./src:/app/src
+      - ./prisma:/app/prisma
+      - node_modules:/app/node_modules
+      # Inbox uploads (recipe photos/voice/video) need to survive a
+      # container recreate — same reasoning as Postgres/ntfy's local-data.
+      - ../local-data/recipe-media:/app/uploads
+    restart: unless-stopped
+
+volumes:
+  node_modules:

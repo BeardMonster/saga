@@ -1,0 +1,1 @@
+ALTER TABLE "people" ADD COLUMN "birthdayYearKnown" BOOLEAN NOT NULL DEFAULT true;

@@ -1,0 +1,927 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  // Prisma's migrate dev needs CREATEDB to build a temporary shadow database
+  // for diffing; the locked-down app role deliberately doesn't have that, so
+  // this points shadow-db creation at the Postgres superuser credentials
+  // instead. Only used at dev-migration time, never by the running app.
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  myregistryUrl String?
+  createdAt    DateTime @default(now())
+
+  projects   Project[]
+  checklists Checklist[]
+  goals      Goal[]
+  calendarEvents   CalendarEvent[]
+  reminderCascades ReminderCascade[]
+  people           Person[]
+  broadcasts       Broadcast[]
+  accounts           Account[]
+  investmentAccounts InvestmentAccount[]
+  recipes            Recipe[]
+  aiTaskSettings     AiTaskSetting[]
+  inboxEntries       InboxEntry[]
+  groceryStores      GroceryStore[]
+  shoppingListItems  ShoppingListItem[]
+  systemAlerts       SystemAlert[]
+  insults            Insult[]
+  dailyPicks         DailyPick[]
+  groceryCatalogItems GroceryCatalogItem[]
+  groceryReceipts GroceryReceipt[]
+  groceryReceiptItemAliases GroceryReceiptItemAlias[]
+
+  @@map("users")
+}
+
+enum ProjectStatus {
+  active
+  done
+  archived
+}
+
+model Project {
+  id          String        @id @default(uuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id])
+  name        String
+  description String?
+  status      ProjectStatus @default(active)
+  // Set when status flips to done, cleared if reopened.
+  completedAt DateTime?
+  page        ProjectPage   @default(projects)
+  // User-controlled manual ordering (drag/move-up-down in the UI), not a
+  // creation-order artifact — same pattern as ChecklistItem.position.
+  position    Int           @default(0)
+  createdAt   DateTime      @default(now())
+  // Soft delete — "deleting" moves a row to Trash instead of removing it,
+  // so it can be restored within 30 days (see lib/trash.ts). Null means
+  // active/live; every list query filters this out.
+  deletedAt   DateTime?
+
+  checklists Checklist[]
+
+  @@map("projects")
+}
+
+enum ChecklistKind {
+  generic
+  grocery
+  note // a free-form text section (uses Checklist.body instead of items)
+}
+
+// Which top-level page a project container shows on.
+enum ProjectPage {
+  projects
+  checklists
+}
+
+model Checklist {
+  id        String        @id @default(uuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id])
+  projectId String?
+  project   Project?      @relation(fields: [projectId], references: [id])
+  name      String
+  kind      ChecklistKind @default(generic)
+  position  Int           @default(0) // manual ordering — see Project.position
+  // Set when the checklist is marked complete (moves to a Completed list); null = active.
+  completedAt DateTime?
+  description String?
+  body        String? // text content when kind = note
+  createdAt DateTime      @default(now())
+  deletedAt DateTime? // soft delete — see Project.deletedAt
+  // Weekly grocery-list rotation only (see grocery/service.ts startNewWeek):
+  // a past week's list, kept indefinitely as a read-only historical
+  // snapshot rather than deleted outright. Distinct from deletedAt (a
+  // user-initiated Trash delete); an archived checklist never shows up in
+  // the normal checklist listing at all.
+  archivedAt DateTime?
+
+  items ChecklistItem[]
+
+  @@map("checklists")
+}
+
+model ChecklistItem {
+  id          String    @id @default(uuid())
+  checklistId String
+  checklist   Checklist @relation(fields: [checklistId], references: [id])
+  title       String
+  isComplete  Boolean   @default(false)
+  completedAt DateTime?
+  position    Int       @default(0)
+  dueDate     DateTime?
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime? // soft delete — see Project.deletedAt
+  // Hand-flagged as "short, low-effort" — surfaces in the cross-checklist
+  // Quick Wins view for low-energy days. Never inferred automatically;
+  // nothing about a title reliably predicts how long a task actually takes.
+  isQuickWin  Boolean   @default(false)
+
+  dailyPicks DailyPick[]
+
+  @@map("checklist_items")
+}
+
+enum GoalHorizon {
+  ten_year
+  five_year
+  three_year
+  one_year
+  six_month
+  three_month
+  one_month
+  two_week
+  one_week
+}
+
+enum GoalStatus {
+  active
+  achieved
+  abandoned
+}
+
+model Goal {
+  id          String      @id @default(uuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id])
+  title       String
+  description String?
+  horizon     GoalHorizon
+  // Set only for a custom time frame ("7 years", "3 days"): the wording the
+  // user picked. `horizon` then holds the nearest built-in group so
+  // ordering and icons still work.
+  horizonLabel String?
+  targetDate  DateTime?
+  status      GoalStatus  @default(active)
+  // Manual ordering WITHIN a horizon group (goals are grouped by horizon
+  // first — see GoalsPage's HORIZON_ORDER sort — this only reorders goals
+  // that share the same horizon).
+  position    Int         @default(0)
+  createdAt   DateTime    @default(now())
+  deletedAt   DateTime? // soft delete — see Project.deletedAt
+
+  reminderCascades ReminderCascade[]
+
+  @@map("goals")
+}
+
+model CalendarEvent {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+  title          String
+  startAt        DateTime
+  endAt          DateTime?
+  location       String?
+  // RFC 5545 RRULE string — the same recurrence format Google Calendar's API
+  // and Apple's CalDAV both speak, per DATA-MODEL.md's decision not to build
+  // a custom recurrence engine.
+  recurrenceRule String?
+  // Google/Apple event id once 2-way sync exists (Phase 2 follow-up, needs
+  // OAuth credentials Brandon sets up separately) — null until then.
+  externalRef    String?
+  // True for date-only events (birthdays, anniversaries) with no meaningful
+  // time-of-day. Display must format these with a fixed UTC offset instead
+  // of the viewer's local timezone, or the date can shift by a day.
+  isAllDay       Boolean   @default(false)
+  isShared       Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime? // soft delete — see Project.deletedAt
+
+  // A calendar event can own a reminder cascade the same way a Google
+  // Calendar event owns a list of notification offsets, instead of the two
+  // being linked only by a matching title/date.
+  reminderCascades ReminderCascade[]
+
+  @@map("calendar_events")
+}
+
+enum ReminderSubjectType {
+  goal
+  person
+  freeform
+}
+
+model ReminderCascade {
+  id          String              @id @default(uuid())
+  userId      String
+  user        User                @relation(fields: [userId], references: [id])
+  title       String
+  // Date-only (no time-of-day) — every cascade in this app is anchored to a
+  // calendar day, never a specific moment, so this is stored as a pure SQL
+  // date to avoid any local-timezone reinterpretation when read back.
+  anchorDate  DateTime            @db.Date
+  // Days relative to anchorDate, e.g. [-30,-7,-1,0] for a birthday cascade.
+  cadenceDays Int[]
+  subjectType ReminderSubjectType @default(freeform)
+  goalId      String?
+  goal        Goal?               @relation(fields: [goalId], references: [id])
+  personId    String?
+  person      Person?             @relation(fields: [personId], references: [id])
+  // Links this cascade to the calendar event it's reminding about, mirroring
+  // how a Google Calendar event owns its own list of notification offsets
+  // rather than the two being separate records linked only by matching title.
+  calendarEventId String?
+  calendarEvent   CalendarEvent?  @relation(fields: [calendarEventId], references: [id])
+  // When true, once the final (day-of) instance fires, anchorDate rolls
+  // forward one year and a fresh set of instances is generated automatically
+  // — this is what makes a birthday reminder an annual thing rather than a
+  // one-shot that needs manually re-triggering every year.
+  isRecurringAnnually Boolean     @default(false)
+  createdAt   DateTime            @default(now())
+  deletedAt   DateTime? // soft delete — see Project.deletedAt
+
+  instances ReminderInstance[]
+
+  @@map("reminder_cascades")
+}
+
+model ReminderInstance {
+  id             String          @id @default(uuid())
+  cascadeId      String
+  cascade        ReminderCascade @relation(fields: [cascadeId], references: [id])
+  fireAt         DateTime
+  sentAt         DateTime?
+  acknowledgedAt DateTime?
+
+  @@map("reminder_instances")
+}
+
+model Person {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+  name           String
+  relationship   String?
+  // Date-only, never a timestamp — a birthday has no time-of-day, so this is
+  // stored as a pure SQL date rather than a timestamp to avoid local-timezone
+  // reinterpretation shifting it by a day when read back.
+  birthday       DateTime? @db.Date
+  // false when only the month and day are known — birthday then carries a
+  // placeholder year (2000, a leap year so Feb 29 works) that is never shown.
+  birthdayYearKnown Boolean @default(true)
+  // Flips true the first time the person page opens and the default note
+  // sections are created, so deleting them all later doesn't bring them back.
+  notesSetUp     Boolean   @default(false)
+  phone          String?
+  discordUserId  String?
+  notes          String?
+  // Freeform structured data — likes/loves/hates, go-to restaurant orders,
+  // etc. JSON rather than a normalized table per DATA-MODEL.md: faster to
+  // build, flexible enough for this, revisit only if cross-person querying
+  // is ever actually needed.
+  preferences    Json?
+  position       Int       @default(0) // manual ordering — see Project.position
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime? // soft delete — see Project.deletedAt
+
+  sections         PersonSection[]
+  reminderCascades ReminderCascade[]
+
+  @@map("people")
+}
+
+enum GiftIdeaStatus {
+  idea
+  purchased
+  given
+}
+
+enum BroadcastChannel {
+  sms
+  discord
+}
+
+enum BroadcastStatus {
+  draft
+  sent
+  failed
+}
+
+model Broadcast {
+  id           String             @id @default(uuid())
+  userId       String
+  user         User               @relation(fields: [userId], references: [id])
+  title        String
+  messageBody  String
+  channels     BroadcastChannel[]
+  // Person ids this went out to — kept as a simple array rather than a join
+  // table since broadcasts are fire-and-forget, not something queried from
+  // the Person side.
+  recipientIds String[]
+  status       BroadcastStatus    @default(draft)
+  sentAt       DateTime?
+  createdAt    DateTime           @default(now())
+  deletedAt    DateTime? // soft delete — see Project.deletedAt
+
+  @@map("broadcasts")
+}
+
+// ── Phase 4 — Financial ingestion & insights ────────────────────────────
+// Transactional data (bank/credit card/Venmo/PayPal/Wise/Cash App) funnels
+// through Account/Statement/Transaction. Investment/retirement data (401k,
+// brokerage) is a genuinely different shape — point-in-time balances, not
+// itemized purchases — so it gets its own InvestmentAccount/BalanceSnapshot
+// pair instead of being forced into the transaction model. See DATA-MODEL.md.
+
+enum AccountPlatform {
+  bank
+  credit_card
+  venmo
+  paypal
+  wise
+  cashapp
+}
+
+enum AccountType {
+  checking
+  savings
+  credit
+  payment_app
+}
+
+model Account {
+  id          String          @id @default(uuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id])
+  name        String
+  institution String?
+  platform    AccountPlatform
+  type        AccountType
+  last4       String?
+  createdAt   DateTime        @default(now())
+  deletedAt   DateTime? // soft delete — see Project.deletedAt
+
+  statements    Statement[]
+  transactions  Transaction[]
+  subscriptions Subscription[]
+
+  @@map("finance_accounts")
+}
+
+enum ImportMethod {
+  file_upload
+  pasted_text
+}
+
+model Statement {
+  id            String       @id @default(uuid())
+  accountId     String
+  account       Account      @relation(fields: [accountId], references: [id])
+  periodStart   DateTime     @db.Date
+  periodEnd     DateTime     @db.Date
+  importedAt    DateTime     @default(now())
+  importMethod  ImportMethod
+  // Path/ref to the uploaded file, when importMethod is file_upload; null
+  // for pasted_text imports.
+  sourceFileRef String?
+  deletedAt     DateTime? // soft delete — see Project.deletedAt
+
+  transactions Transaction[]
+
+  @@map("finance_statements")
+}
+
+// Which tier made a transaction's categorization call — never "claude".
+// Financial data never leaves the box; see the AI-strategy hard exception
+// in README.md. Ollama (local) or a rule/manual correction only.
+enum CategorizedBy {
+  rule
+  ollama
+  manual
+}
+
+model Transaction {
+  id            String         @id @default(uuid())
+  accountId     String
+  account       Account        @relation(fields: [accountId], references: [id])
+  statementId   String?
+  statement     Statement?     @relation(fields: [statementId], references: [id])
+  // Date-only — a bank posting date, not a specific moment.
+  occurredAt    DateTime       @db.Date
+  merchantRaw   String
+  amount        Decimal        @db.Decimal(10, 2)
+  categoryId    String?
+  category      Category?      @relation(fields: [categoryId], references: [id])
+  categorizedBy CategorizedBy?
+  createdAt     DateTime       @default(now())
+  deletedAt     DateTime? // soft delete — see Project.deletedAt
+
+  @@map("finance_transactions")
+}
+
+// Small hierarchy (e.g. Food > Groceries, Food > Dining Out). Shared with
+// Phase 5's grocery deal cross-referencing later — one taxonomy, not two.
+model Category {
+  id               String     @id @default(uuid())
+  name             String
+  parentCategoryId String?
+  parentCategory   Category?  @relation("CategoryHierarchy", fields: [parentCategoryId], references: [id])
+  subCategories    Category[] @relation("CategoryHierarchy")
+  deletedAt        DateTime? // soft delete — see Project.deletedAt
+
+  transactions Transaction[]
+
+  @@map("finance_categories")
+}
+
+enum BillingCycle {
+  weekly
+  monthly
+  quarterly
+  yearly
+}
+
+model Subscription {
+  id             String       @id @default(uuid())
+  accountId      String
+  account        Account      @relation(fields: [accountId], references: [id])
+  serviceName    String
+  amount         Decimal      @db.Decimal(10, 2)
+  billingCycle   BillingCycle
+  nextChargeDate DateTime     @db.Date
+  createdAt      DateTime     @default(now())
+  deletedAt      DateTime? // soft delete — see Project.deletedAt
+
+  @@map("finance_subscriptions")
+}
+
+// Prisma enum values can't start with a digit — k401 is stored/displayed as
+// "401k" in the UI layer, not renamed in the database.
+enum InvestmentAccountType {
+  k401
+  brokerage
+  ira
+  other
+}
+
+model InvestmentAccount {
+  id          String                @id @default(uuid())
+  userId      String
+  user        User                  @relation(fields: [userId], references: [id])
+  institution String
+  accountType InvestmentAccountType
+  last4       String?
+  createdAt   DateTime              @default(now())
+  deletedAt   DateTime? // soft delete — see Project.deletedAt
+
+  balanceSnapshots BalanceSnapshot[]
+
+  @@map("investment_accounts")
+}
+
+// Periodic point-in-time balances, not itemized transactions — what
+// actually tracks progress toward the early-retirement goal.
+model BalanceSnapshot {
+  id                      String            @id @default(uuid())
+  investmentAccountId     String
+  investmentAccount       InvestmentAccount @relation(fields: [investmentAccountId], references: [id])
+  asOfDate                DateTime          @db.Date
+  totalValue              Decimal           @db.Decimal(12, 2)
+  contributionsThisPeriod Decimal?          @db.Decimal(10, 2)
+  sourceStatementRef      String?
+  createdAt               DateTime          @default(now())
+  deletedAt               DateTime? // soft delete — see Project.deletedAt
+
+  @@map("balance_snapshots")
+}
+
+// ── Recipes ─────────────────────────────────────────────────────────────
+// A personal recipe box — search is client-side over this list (title,
+// ingredients, tags), not a separate search endpoint; the collection is
+// small enough (single household) that there's no need for one.
+model Recipe {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  title        String
+  description  String?
+  // Freeform lines, e.g. "2 cups flour" — not a normalized ingredient
+  // table. Matches Person.preferences' reasoning: faster to build, no
+  // current need to query "recipes using X ingredient" structurally.
+  ingredients  String[]
+  instructions String
+  tags         String[]
+  prepMinutes  Int?
+  cookMinutes  Int?
+  servings     Int?
+  sourceUrl    String?
+  // Freeform tags, not a fixed enum — the web UI offers the 9 FDA major
+  // allergens + coconut as quick-toggle checkboxes, but any string can be
+  // added (a custom allergen typed in now, or later an Ollama ingredient
+  // scan tagging things automatically — no schema change needed either way).
+  allergens    String[] @default([])
+  position     Int      @default(0) // manual ordering — see Project.position
+  createdAt    DateTime @default(now())
+  deletedAt    DateTime? // soft delete — see Project.deletedAt; a purge also unlinks source media files
+
+  // Original media a recipe was captured from, kept as keepsakes distinct
+  // from each other in the UI ("original card" vs "original recording").
+  sourceImagePaths String[] @default([])
+  sourceMediaPaths String[] @default([])
+  sourceTranscript String?
+
+  @@map("recipes")
+}
+
+// ── AI task routing + Inbox ("dumping ground") ───────────────────────────
+// Every AI-assisted feature dispatches through one call site
+// (lib/ai/taskRunner.ts) keyed by a freeform taskKey, so which model
+// handles which task is a per-user setting, not a hardcoded choice —
+// picking a provider/model per task, per DATA-MODEL's local-first AI
+// strategy, and letting a photo/voice pipeline swap strategies entirely
+// (see recipe_photo_strategy) without touching code.
+
+enum AiProvider {
+  ollama
+  claude
+  tesseract
+  // Claude Code CLI run headlessly, authenticated via CLAUDE_CODE_OAUTH_TOKEN
+  // (a Pro/Max subscription token, not a separate paid API key) — a
+  // last-resort option for tasks a local model genuinely can't do well
+  // (e.g. cursive handwriting), without incurring API billing.
+  claude_cli
+}
+
+model AiTaskSetting {
+  id          String     @id @default(uuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id])
+  // Freeform key, not an enum — a new task type (e.g. the deferred recipe
+  // allergen scan) just needs a new key, no migration.
+  taskKey     String
+  provider    AiProvider
+  ollamaModel String?
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([userId, taskKey])
+  @@map("ai_task_settings")
+}
+
+enum InboxEntryKind {
+  text
+  image
+  audio
+  video
+}
+
+enum InboxEntryStatus {
+  processing
+  pending
+  confirmed
+  failed
+}
+
+model InboxEntry {
+  id     String         @id @default(uuid())
+  userId String
+  user   User           @relation(fields: [userId], references: [id])
+  kind   InboxEntryKind
+  // Which page's own photo-review list this belongs on — "recipe" or
+  // "grocery_receipt" today, both kind = image. Needed because Recipes and
+  // Grocery each show their own in-page upload-progress cards and would
+  // otherwise both match a plain kind = image filter, showing each other's
+  // photos. Null for anything that isn't an image upload.
+  purpose String?
+  // Set when kind = text.
+  rawText String?
+  // One or more source files for one entry — e.g. front + back of the same
+  // recipe card (image), or a single recording (audio/video). Always
+  // extracted together into one combined proposal.
+  mediaPaths String[]         @default([])
+  // Set once transcription runs, for audio/video.
+  transcript String?
+  status     InboxEntryStatus @default(processing)
+  // Live log of what the extraction pipeline has tried so far — e.g. "OCR
+  // confidence 38% — escalating to Claude". Lets the review UI show what's
+  // happening step by step instead of a plain "thinking..." spinner.
+  progressSteps Json @default("[]")
+  // The AI's current proposal: { targetType: "goal" | "checklist_item" |
+  // ... | "recipe", fields: {...} }. Held here, not applied anywhere,
+  // until the user explicitly confirms it.
+  proposal Json?
+  // [{ proposal, userFeedback }, ...] — full history, so a reevaluation
+  // has every prior miss and correction to work from, not just the latest.
+  attempts  Json     @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("inbox_entries")
+}
+
+// ── Grocery deal price comparison ───────────────────────────────────────
+// Weekly-ad price checking across the stores Brandon actually shops at
+// (zip 27615/Raleigh area), so a shopping-list staple's cheapest current
+// store is visible without manually flipping through every circular.
+
+enum GroceryStoreSource {
+  // Ad data comes from Flipp (flipp.com), which aggregates most major
+  // chains' weekly circulars behind one consistent search/item-lookup UI —
+  // confirmed live for Lowe's Foods, Harris Teeter, Aldi, Lidl, Food Lion,
+  // Walmart, and Publix at this zip code. Only covers this week's sale
+  // highlights, rendered as images (needs a vision model to read).
+  flipp
+  // Scraped directly from the store's own website — real per-item pricing
+  // as plain text (no vision model needed), not just whatever's on this
+  // week's sale flyer. Confirmed live for Harris Teeter: no login needed
+  // to view prices, has its own store-selection flow (see externalConfig).
+  // Being migrated to store-by-store, starting with Harris Teeter.
+  direct
+  // Not on Flipp and no direct-site scraper built yet (e.g. a small
+  // independent market like Three Hermanos International) — needs its own
+  // checking approach; scanning simply skips these for now.
+  manual
+}
+
+model GroceryStore {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+  name   String
+  // Flipp's own URL slug for this store (e.g. "lowes-foods", "aldi") — set
+  // only when source = flipp.
+  flippSlug String?
+  source    GroceryStoreSource @default(flipp)
+  // Site-specific scraping config for source = direct — e.g. for Harris
+  // Teeter, { "storeName": "Stonehenge Market", "storeZip": "27615" } so
+  // the scraper knows which physical store's pricing to pin to. Freeform
+  // JSON rather than dedicated columns since every direct-scraped site
+  // will need different fields.
+  externalConfig Json?
+  position       Int                @default(0)
+  createdAt      DateTime           @default(now())
+  deletedAt      DateTime? // soft delete — see Project.deletedAt
+
+  deals  GroceryDeal[]
+  alerts SystemAlert[]
+  receipts GroceryReceipt[]
+  receiptItemAliases GroceryReceiptItemAlias[]
+
+  @@map("grocery_stores")
+}
+
+// A photographed grocery receipt — the actual price paid, not an advertised
+// one, kept alongside the scanned-ad data rather than replacing it. Confirmed
+// through the same Brain Dump review pipeline as everything else the AI
+// proposes (see inbox/targetTypes.ts's "grocery_receipt" entry) — nothing
+// here is ever saved without being shown to Brandon first.
+model GroceryReceipt {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  storeId      String?
+  store        GroceryStore? @relation(fields: [storeId], references: [id])
+  storeNameRaw String? // whatever the receipt itself printed, for reference even after a store match
+  purchasedAt  DateTime?
+  totalAmount  Decimal?  @db.Decimal(10, 2)
+  imagePath    String // the photo itself, kept as a keepsake (same idea as a recipe's sourceImagePaths)
+  createdAt    DateTime  @default(now())
+  deletedAt    DateTime?
+
+  items GroceryReceiptItem[]
+
+  @@map("grocery_receipts")
+}
+
+model GroceryReceiptItem {
+  id          String         @id @default(uuid())
+  receiptId   String
+  receipt     GroceryReceipt @relation(fields: [receiptId], references: [id])
+  rawText     String // exactly as printed/read off the receipt
+  matchedName String? // the resolved real item name, once confirmed — null if never resolved
+  price       Decimal        @db.Decimal(10, 2)
+  position    Int            @default(0)
+  createdAt   DateTime       @default(now())
+
+  @@map("grocery_receipt_items")
+}
+
+// The learned "this store's receipt text means this item" dictionary
+// (Brandon's idea) — keyed per store since two stores abbreviate the same
+// product differently. Confirming a match (whether it needed a manual pick
+// or was an obvious auto-guess) writes here, so the identical raw text from
+// that same store never has to ask again. A generic item like "Strawberries"
+// usually needs no entry at all — see grocery/receipts.ts's fuzzy-match
+// fallback, which is tried first and often already gets those right.
+model GroceryReceiptItemAlias {
+  id          String       @id @default(uuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id])
+  storeId     String
+  store       GroceryStore @relation(fields: [storeId], references: [id])
+  rawTextKey  String // trimmed + lowercased receipt text — the matching key
+  matchedName String // confirmed real item name, display casing
+  updatedAt   DateTime     @updatedAt
+  createdAt   DateTime     @default(now())
+
+  @@unique([userId, storeId, rawTextKey])
+  @@map("grocery_receipt_item_aliases")
+}
+
+// A "someone needs to look at this" flag, raised by background jobs that
+// run unattended (the grocery scanner today; anything else with a
+// scheduled/automated pass later) — surfaced as a site-wide banner plus a
+// push notification, since Brandon checks in on his own schedule rather
+// than watching the site live. `source` is a plain string tag (e.g.
+// "grocery_scanner") rather than an enum — new background jobs shouldn't
+// need a migration just to start raising alerts.
+model SystemAlert {
+  id      String        @id @default(uuid())
+  userId  String
+  user    User          @relation(fields: [userId], references: [id])
+  source  String
+  message String
+  storeId String?
+  store   GroceryStore? @relation(fields: [storeId], references: [id])
+
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
+
+  @@map("system_alerts")
+}
+
+model ShoppingListItem {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+  // What Brandon actually calls it ("chicken breast", "non-dairy yogurt") —
+  // also the literal term searched on Flipp per store.
+  name      String
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  deletedAt DateTime? // soft delete — see Project.deletedAt
+
+  deals GroceryDeal[]
+
+  @@map("shopping_list_items")
+}
+
+// One observed price for one shopping-list item at one store, from one
+// weekly scan. Kept as an append-only log rather than upserted in place —
+// price history over time falls out of this for free, no extra modeling.
+model GroceryDeal {
+  id                 String           @id @default(uuid())
+  shoppingListItemId String
+  shoppingListItem   ShoppingListItem @relation(fields: [shoppingListItemId], references: [id])
+  storeId            String
+  store              GroceryStore     @relation(fields: [storeId], references: [id])
+  // The actual advertised product name (e.g. "EverRoast Chicken Breast"),
+  // not just Brandon's generic shopping-list term — several real products
+  // can match one shopping-list item, and this is what actually shows up
+  // in the ad.
+  matchedProductName String
+  // The actual price for the specific package/container as sold — what
+  // Brandon would actually pay at checkout for that item.
+  price     Decimal  @db.Decimal(10, 2)
+  // The normalized per-unit rate (e.g. $0.38 for "$0.38/oz"), when the
+  // store shows one — lets two different package sizes be compared
+  // apples-to-apples. Null when only a flat price exists (most
+  // fixed-size packaged goods).
+  unitPrice Decimal? @db.Decimal(10, 4)
+  // Freeform — "lb", "each", "12 oz" — ad units aren't consistent enough
+  // to normalize into an enum. Describes unitPrice when set.
+  unit      String?
+  validFrom DateTime? @db.Date
+  validTo   DateTime? @db.Date
+  sourceUrl String?
+  scannedAt DateTime  @default(now())
+
+  @@map("grocery_deals")
+}
+
+// ── Person notes: Section → Note → Item ─────────────────────────────────
+
+// A big group of notes about one person, e.g. "Favorites", "Orders". A
+// private section is hidden behind a Show tap in the UI and left out of
+// search by default (and is never sent to any AI).
+model PersonSection {
+  id        String    @id @default(uuid())
+  personId  String
+  person    Person    @relation(fields: [personId], references: [id])
+  title     String
+  // "gift_ideas" is the built-in section that shows the person's gift ideas;
+  // it moves, collapses and renames like any other but can't be deleted.
+  kind      PersonSectionKind @default(notes)
+  isPrivate Boolean   @default(false)
+  position  Int       @default(0)
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  notes PersonNote[]
+
+  @@map("person_sections")
+}
+
+enum PersonSectionKind {
+  notes
+  gift_ideas
+}
+
+enum PersonNoteKind {
+  list // bullet items, each optionally "label: value"
+  text // one free paragraph (a story, a long note)
+}
+
+// A titled card inside a section, e.g. "Fav Foods", "Subway", "Ideal date".
+model PersonNote {
+  id        String         @id @default(uuid())
+  sectionId String
+  section   PersonSection  @relation(fields: [sectionId], references: [id])
+  title     String
+  kind      PersonNoteKind @default(list)
+  body      String? // the paragraph when kind = text
+  position  Int            @default(0)
+  createdAt DateTime       @default(now())
+  deletedAt DateTime?
+
+  items PersonNoteItem[]
+
+  @@map("person_notes")
+}
+
+// One bullet. parentId allows a single level of nesting (Burial > its beers).
+model PersonNoteItem {
+  id        String           @id @default(uuid())
+  noteId    String
+  note      PersonNote       @relation(fields: [noteId], references: [id])
+  parentId  String?
+  parent    PersonNoteItem?  @relation("ItemChildren", fields: [parentId], references: [id])
+  children  PersonNoteItem[] @relation("ItemChildren")
+  label     String? // the "Flower" in "Flower: Lilies"
+  text      String
+  isPinned  Boolean          @default(false) // shows on the person's card on the People page
+  // Only meaningful for items inside the person's Gift Ideas section.
+  giftStatus GiftIdeaStatus?
+  position  Int              @default(0)
+  createdAt DateTime         @default(now())
+  deletedAt DateTime?
+
+  @@map("person_note_items")
+}
+
+// A stash of clever put-downs, typed in or pulled from a video someone
+// linked — the Home page shows one at random. Deliberately just a bag of
+// short lines: no folders/tags, since the whole point is a quick memory
+// jog, not another thing to organize.
+model Insult {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  text      String
+  // Where it came from, for context in the list — null for one typed in by hand.
+  sourceUrl String?
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  @@map("insults")
+}
+
+// Today's single suggested task, for the Home page's "one thing" nudge.
+// The most recent row for a given day is the live pick — asking for a
+// different one just adds a new row rather than overwriting, so nothing is
+// ever silently lost. A day is identified by midnight in the server's own
+// local time, same as the streak/stats calculations.
+model DailyPick {
+  id              String        @id @default(uuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+  checklistItemId String
+  checklistItem   ChecklistItem @relation(fields: [checklistItemId], references: [id])
+  pickedDate      DateTime
+  createdAt       DateTime      @default(now())
+
+  @@map("daily_picks")
+}
+
+// A running tally per distinct grocery item name, updated the moment each
+// week is archived (see grocery/service.ts startNewWeek) — a fast summary
+// on top of the full weekly-checklist history, not a replacement for it.
+// Covers staples and one-off items alike: there's no separate concept here,
+// just "how often has this shown up on a weekly list, and how often did it
+// actually get bought."
+model GroceryCatalogItem {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  name          String // display casing, most recently seen
+  nameKey       String // trimmed + lowercased — the actual matching key
+  timesAppeared Int       @default(0)
+  timesBought   Int       @default(0)
+  lastAddedAt   DateTime?
+  lastBoughtAt  DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@unique([userId, nameKey])
+  @@map("grocery_catalog_items")
+}

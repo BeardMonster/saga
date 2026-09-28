@@ -1,0 +1,22 @@
+# Real secrets — DB passwords, ntfy topic, Claude OAuth token, etc. The
+# .env.example files stay tracked as the template; the real ones never do.
+**/.env
+!**/.env.example
+
+# Dependencies (Docker-managed named volumes on the server; never present
+# here, but ignored defensively in case that ever changes)
+**/node_modules/
+
+# Actual database files / ntfy's own cache — never meant to be versioned,
+# and local-data/postgres already has its own narrower .gitignore too.
+local-data/postgres/data/
+local-data/ntfy/cache/
+
+# Build output
+**/dist/
+**/build/
+**/.vite/
+
+# Editor/OS cruft
+.DS_Store
+Thumbs.db

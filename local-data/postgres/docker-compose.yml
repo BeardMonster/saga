@@ -1,0 +1,18 @@
+name: local-postgres
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: saga-postgres-dev
+    restart: unless-stopped
+    env_file: [.env]
+    # Not 127.0.0.1-only: on native Docker Engine (unlike Docker Desktop),
+    # host.docker.internal resolves to the docker0 bridge gateway, not
+    # loopback, so other containers can't reach a 127.0.0.1-bound port here.
+    # Mitigated by strong password auth + this box being LAN/Tailscale-only.
+    ports: ["5432:5432"]
+    volumes: ["./data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5

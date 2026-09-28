@@ -1,0 +1,22 @@
+name: local-ntfy
+services:
+  ntfy:
+    image: binwiederhier/ntfy
+    container_name: saga-ntfy
+    command:
+      - serve
+    environment:
+      - TZ=America/New_York
+      - NTFY_BASE_URL=http://saga:8090
+      - NTFY_CACHE_FILE=/var/cache/ntfy/cache.db
+      - NTFY_BEHIND_PROXY=false
+    volumes:
+      - ./cache:/var/cache/ntfy
+    ports:
+      - "8090:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 http://localhost:80/v1/health -O - || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

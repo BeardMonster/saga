@@ -1,0 +1,64 @@
+﻿# Saga
+
+A self-hosted personal life-management platform for Brandon: checklists, projects, a todo/grocery list, a shared calendar with reminders, nebulous long-range goals (10yr → 3mo), person/relationship profiles with gift tracking, spending insights, AI-assisted grocery deal hunting, and (much later) a locked-down Facebook monitor for specific friends/groups/events. Phase two adds a phone app, mainly for alarms/reminders.
+
+Brandon is medicated ADHD and still relies heavily on external reminders — for anything from birthdays months out to day-to-day tasks. That shapes real design decisions here, not just the feature list: reminders should cascade automatically instead of requiring several to be set by hand, task completion should give some kind of small immediate payoff (sound/animation) rather than just silently checking a box, and low-friction capture matters more than perfect organization at the moment something is top of mind.
+
+Named for the Norse goddess of wisdom and storytelling — and for the plain English word: a saga is a chronicle of a life. Fitting for something meant to hold the story of everything, not just watch over it. (Originally built under the working name "Heimdall," reserved instead for a future, unrelated network-monitor project — see memory for the full renaming history.)
+
+## Where things live
+
+- **This repo** (`C:\Users\lostlegend\Projects\saga`, native Windows) — docs, compose files, and eventually the `saga-api` / `saga-web` app repos, following the multi-repo layout in [STACK-FOUNDATION.md](STACK-FOUNDATION.md).
+- **Runtime** — a dedicated Lenovo M920q (Tiny) with a Yeston RTX 3050 6GB, wiped and rebuilt from scratch for this. **Proxmox VE** on bare metal, with the app living in an Ubuntu 24.04 **LXC** container (`saga`, running Docker + Ollama). Chosen over a VM specifically because this box's GPU will eventually be shared by more than one workload (see below) and a consumer GPU can only be PCI-passed to one VM at a time. (Brandon's R730, `r730-proxmox`, is a separate work box and stays out of this — see [SETUP-CHECKLIST.md](SETUP-CHECKLIST.md) for the full infra plan.)
+- **Claude session memory** — `Saga/` folder alongside `Ebon_Legion/` in the auto-memory index, for facts that should persist across sessions (decisions, stack, status).
+
+## Adjacent, not part of this project
+
+The m920q's GPU is also slated to be shared with two **separate projects**, each with its own folder and deferred to a later date — noted here only because they're *why* Saga's guest is an LXC rather than a VM (see SETUP-CHECKLIST.md):
+
+- **[Plex migration](../plex-migration)** (`C:\Users\lostlegend\Projects\plex-migration`) — existing Plex server, migrating over, likely a few months out
+- **[Home automation](../home-automation)** (`C:\Users\lostlegend\Projects\home-automation`) — future local Alexa-replacement agent; likely split between the Synology NAS (device control) and this box (voice/LLM layer)
+
+## AI strategy
+
+Saga's AI-powered features (grocery deal analysis, meal planning, etc.) use a local-first, cloud-escalation split: **Ollama** on the `saga` LXC (a quantized 7-8B instruct model — e.g. Llama 3.1 8B or Qwen2.5 7B at Q4_K_M — fits comfortably in 6GB VRAM) handles high-volume, cheap, repetitive work: classifying sale items, spotting fake-sale patterns, extracting structured data from flyers, drafting a first-pass meal plan. Anything genuinely ambiguous or reasoning-heavy (the goals/consequences reflection work, tricky free-text parsing) escalates to the **Claude API** instead. The API service holds both an `OLLAMA_URL` and an Anthropic API key; which one a given feature calls is a per-feature decision made in Phase 4 (domain modules), not something wired up generically.
+
+**Hard exception: financial data never escalates to Claude.** Statement parsing and transaction/investment-balance extraction (Phase 4) stays fully local via Ollama, full stop — no cloud API call, ever, regardless of how ambiguous a document is. Given the sensitivity of bank/investment data, this is a deliberate carve-out from the general escalation policy above, not a per-feature judgment call.
+
+## Key decisions
+
+- **Auth model: single-user, for now.** Nothing currently planned needs real multi-user accounts — calendar invites cover RSVPs, and Brandon's retro-gaming LAN parties (20-30 rotating guests) are coordinated externally via Facebook events, SMS, and Discord, which already works. Revisit only if a real need for other people to log in and interact (not just view/RSVP) shows up.
+- **Public wishlist: integrate with MyRegistry.com, don't build it.** MyRegistry is a universal wishlist (any store, via a browser button) with a plain shareable link and a "Hide what's been purchased" setting — exactly the claim-tracking behavior wanted, already built and battle-tested. (Checked Elfster too: it hides purchases from the owner as well, but marking something purchased appears to require being a "friend" or part of a formal gift exchange, which doesn't fit "share a link with anyone who asks" as cleanly.) Saga just stores the link to Brandon's MyRegistry list — no Cloudflare Pages, no claim-tracking database, no sync job. The private per-person gift-idea list (things Brandon plans to buy *others*) is unaffected — that stays inside Saga.
+- **Guest/event communication: a themed multi-channel broadcast, not a tracker.** Compose one themed message, fan it out via SMS (Twilio) and a Discord bot post to Brandon's server — covers invites and updates for things like the retro-gaming LAN parties without building any RSVP/attendee-tracking UI he didn't ask for. Lives in Phase 3 alongside People & Gifts, reusing the same contact data.
+- **Backup & recovery: a proper 3-2-1, target confirmed as Backblaze B2.** Nightly local backups (Postgres dump + any file storage) to Brandon's Synology NAS, matching how his other projects already back up there. Monthly encrypted offsite copy via **restic** to Backblaze B2 ($0.006/GB-mo, no minimum storage duration, no retrieval fees). Brandon's "1TB Google storage" is the Google One consumer plan, and GCP Cloud Storage buckets were considered as an alternative — but even GCS Coldline's lower per-GB rate ($0.004) comes with a 90-day minimum retention and a $0.02/GB retrieval fee, which actively penalizes restic's normal prune/retention behavior and any real restore. At this data volume the dollar difference is negligible either way, so B2's simpler terms win on fit, not just price.
+- **Remote access: not deferred after all — Brandon already has Tailscale on his phone.** No reason to wait: install Tailscale on the `saga` LXC during initial setup (a two-minute step, already added to SETUP-CHECKLIST.md) rather than treating it as a later line item.
+
+## Status
+
+Infra not started yet — box is being wiped. See [SETUP-CHECKLIST.md](SETUP-CHECKLIST.md) for the current step.
+
+## Scope / phasing
+
+1. **Core organizer (MVP)** — checklists, projects, todo/grocery list, nebulous goals section (10yr → 3mo). Deliberately small and fast: this phase is really just auth, the core DB models, and a UI shell for everything after it to live in. Ships with basic task-completion feedback (a sound + small animation) from day one — cheap to include here, no reason to wait for a later polish pass. **First real content:** a project to inventory and sell off Brandon's unused retro games/consoles, feeding the early-retirement goal in the goals section.
+2. **Calendar, reminders & important dates** — 2-way Google/Apple sync (read & post), reminders for things coming due, friend game-night pings. Includes **reminder cascades**: set a date once (a birthday, an insurance renewal, a passport expiration, a medication refill) and pick or default to a cadence (e.g. 30/7/1-day-before + day-of), and the system generates the whole chain automatically instead of Brandon manually setting several reminders by hand. Still the single most-requested piece from the original notes. Once this backend exists, the **native phone app** (Android, alarms/reminders only) can start in parallel — it doesn't need the rest of the phases below, since reminders are its only job.
+3. **People & gifts** — a profile per person (freeform + structured notes: likes/loves/hates, go-to restaurant orders, anything worth remembering about them, plus phone/Discord contact info), a private gift-idea list per person (bookmark things noticed year-round so birthday/Christmas shopping starts from a running list instead of zero), a link out to Brandon's own **MyRegistry.com** wishlist (see Key decisions) — solves "I'm hard to buy for" with one link to send anyone who asks, without Saga needing to build or host anything for it — and a themed SMS + Discord broadcast tool for event invites/updates (e.g. the retro-gaming LAN parties), replacing the original notes' "ping friends for weekend projects" idea with something more concrete than a plain open-invitation feature. A birthday in this module feeds phase 2's reminder cascade directly (e.g. a nudge to check someone's gift list a couple weeks out).
+4. **Financial ingestion & insights** — import statements from banks, credit cards, and payment apps (Venmo, PayPal, Wise, Cash App — as file uploads where clean exports exist, or pasted raw text where they don't), parse and categorize transactions entirely on-device via Ollama (no Claude escalation for financial data — see [AI strategy](#ai-strategy)), spending trend/category dashboards, and a credit-card-per-service tracker (falls out naturally once transactions carry account attribution). Manual import by default rather than a live-sync service like Plaid, at least at first — keeps a third party out of the data path. Also includes **investment/net-worth tracking** (401k, Charles Schwab) as periodic balance snapshots rather than itemized transactions — a different shape of data, but the more direct signal for progress toward the early-retirement goal.
+5. **Grocery Deals AI** — built on top of phase 4's real purchase history rather than a separately-tracked list: cross-reference actual buying patterns against sale ads, flag fake sales, suggest cheaper alternatives, filter out dairy by default (Brandon has a dairy allergy — a hard exclusion, not a generic toggle), generate a grocery list with cooking/meal-plan suggestions against a calorie goal.
+6. **Price-watch alerts** for specific items — shares the deal-scanning infra built in phase 5.
+7. **Much later** — Facebook monitor: a local AI with browser access, logged into Brandon's own account, checking specific friends/groups for posts and event invites. Deliberately narrow (specific people/groups only, not a general feed scraper) since the goal is to reduce Facebook usage, not build a bot that keeps him hooked on it. Browser automation with his own session, not the Graph API (which doesn't expose this for a personal account) and not high-frequency polling, to stay well clear of ToS-triggered account flags.
+
+Phases 1-7 are web-only. The native phone app (Android, alarms/reminders only) starts once phase 2's calendar/reminders backend exists — it doesn't wait for phases 3+.
+
+## Open planning items before building
+
+1. **Reminder delivery mechanism before the native app exists** — phases 1-6 are web-only, but reminders need to reach Brandon's phone well before then. Candidates: self-hosted push (e.g. ntfy) for anything not calendar-tied, leaning on 2-way calendar sync so the phone's own calendar app alerts for calendar events. Needs deciding before phase 2 build starts.
+2. **Alarms vs. notifications for the native app** — Brandon said "alarms" specifically, not just reminders. A true alarm (loud, overrides silent/DND, rings till dismissed) needs native Android capability; a PWA notification (far less work, reuses the web app) can't fully replicate that. Only matters once the native-app phase is reached, so lowest urgency.
+
+Data model sketch is done — see [DATA-MODEL.md](DATA-MODEL.md). Backup target, wishlist hosting, and gift-claim visibility are all resolved — see Key decisions above.
+
+## Ideas under consideration (not yet scheduled into a phase)
+
+- **Universal quick-capture inbox** — one low-friction "just dump this somewhere" action (button or shortcut) that doesn't require picking a category up front; triage into a real list happens later. Likely the highest-value ADHD-specific feature on this list, and cheap to build — candidate for pulling into phase 1.
+- **"Waiting on" list** — track things pending from other people (a reply, a package, a refund) so they don't get silently forgotten.
+- **Kanban/board view** as an alternate lens on checklists/projects alongside the plain list view.
+- The shared calendar (invites, RSVPs) still needs some form of public/shareable access — a design note for whoever builds phase 2, not a feature in itself.
