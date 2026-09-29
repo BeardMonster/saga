@@ -39,6 +39,7 @@ model User {
   groceryCatalogItems GroceryCatalogItem[]
   groceryReceipts GroceryReceipt[]
   groceryReceiptItemAliases GroceryReceiptItemAlias[]
+  aiTargetTypeInstructions AiTargetTypeInstruction[]
 
   @@map("users")
 }
@@ -106,6 +107,17 @@ model Checklist {
   // user-initiated Trash delete); an archived checklist never shows up in
   // the normal checklist listing at all.
   archivedAt DateTime?
+  // Whether this checklist's items are eligible for Home-page features
+  // (Today's One Thing, Quick Wins) — defaults on so nothing already
+  // relying on those features loses coverage; turn off for a checklist
+  // that's real but not a daily priority (e.g. a reselling/inventory list).
+  // Only meaningful for kind = generic; grocery/note checklists are already
+  // excluded from both features regardless of this flag.
+  includeOnHome Boolean @default(true)
+  // Pins this checklist to the top of its own page's list, above manual
+  // drag order — used by Notes today (kind = note), but not restricted to
+  // it at the data layer.
+  isPinned      Boolean @default(false)
 
   items ChecklistItem[]
 
@@ -924,4 +936,25 @@ model GroceryCatalogItem {
 
   @@unique([userId, nameKey])
   @@map("grocery_catalog_items")
+}
+
+// User-editable extra guidance for Brain Dump's single-line sorter, one row
+// per target type it can choose between (checklist item, goal, project,
+// etc.). Deliberately ADDITIVE, not a replacement: the required field-shape
+// spec for each type (what keys its JSON must have) stays fixed in code,
+// since the create logic depends on exact field names — this only holds
+// free-text guidance appended alongside that spec, e.g. "always match
+// 'call the bank' to Finance, not a generic checklist." Editable from
+// Settings and from Brain Dump itself, same data either way.
+model AiTargetTypeInstruction {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  targetType String
+  notes      String
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, targetType])
+  @@map("ai_target_type_instructions")
 }

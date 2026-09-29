@@ -41,7 +41,19 @@ export default async function checklistRoutes(server: FastifyInstance) {
     return ok(checklist, "Reset for next time");
   });
 
-  server.patch<{ Params: { id: string }; Body: { name?: string; kind?: "generic" | "grocery" | "note"; completed?: boolean; projectId?: string | null; description?: string | null; body?: string | null } }>(
+  server.patch<{
+    Params: { id: string };
+    Body: {
+      name?: string;
+      kind?: "generic" | "grocery" | "note";
+      completed?: boolean;
+      projectId?: string | null;
+      description?: string | null;
+      body?: string | null;
+      includeOnHome?: boolean;
+      isPinned?: boolean;
+    };
+  }>(
     "/checklists/:id",
     async (request) => {
       const checklist = await service.updateChecklist(server.prisma, request.params.id, request.body);

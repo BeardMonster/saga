@@ -61,9 +61,10 @@ export default function ChecklistsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["checklists"] }),
   });
 
-  // Grocery-kind checklists live on the Grocery Deals page now, alongside
-  // the rest of the grocery stuff, instead of mixed in here.
-  const all = (data?.data ?? []).filter((c) => c.kind !== "grocery");
+  // Grocery-kind checklists live on the Grocery Deals page, and "note" kind
+  // (free-text, no items — Brain Dump's catch-all) lives on its own Notes
+  // page, both alongside the rest of their own stuff instead of mixed in here.
+  const all = (data?.data ?? []).filter((c) => c.kind !== "grocery" && c.kind !== "note");
   const checklists = all.filter((c) => !c.completedAt);
   const completed = all
     .filter((c) => c.completedAt)

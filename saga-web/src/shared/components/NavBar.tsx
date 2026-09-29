@@ -31,6 +31,7 @@ const moreLinks: NavLinkDef[] = [
   { to: "/recipes", label: "Recipes" },
   { to: "/grocery", label: "Grocery Deals" },
   { to: "/brain-dump", label: "Brain Dump" },
+  { to: "/notes", label: "Notes" },
   { to: "/insults", label: "Insults" },
   { to: "/trash", label: "Trash" },
   { to: "/settings", label: "Settings" },

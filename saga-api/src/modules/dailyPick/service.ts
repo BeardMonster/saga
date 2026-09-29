@@ -21,7 +21,7 @@ async function pickRandomItem(prisma: PrismaClient, userId: string, excludeId?: 
   const baseWhere = {
     isComplete: false,
     deletedAt: null,
-    checklist: { userId, kind: "generic" as const, completedAt: null, deletedAt: null },
+    checklist: { userId, kind: "generic" as const, completedAt: null, deletedAt: null, includeOnHome: true },
     ...(excludeId ? { id: { not: excludeId } } : {}),
   };
 

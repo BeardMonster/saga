@@ -107,11 +107,11 @@ function splitNote(rawText: string): string[] {
 }
 
 // Triages ONE short note (a single item — see splitNote).
-function buildTriagePrompt(rawText: string, attempts: Attempt[], context: TriageContext): string {
+async function buildTriagePrompt(prisma: PrismaClient, rawText: string, attempts: Attempt[], context: TriageContext): Promise<string> {
   return (
     `You are sorting ONE short note into the right place in a personal organizer app. ` +
     `Decide which type it belongs to and produce field values for it.\n\n` +
-    `${describeTargetTypesForPrompt()}\n\n` +
+    `${await describeTargetTypesForPrompt(prisma)}\n\n` +
     `Existing checklists (for "checklist_item", set checklistName to the closest EXACT name from this list): ` +
     `${context.checklistNames.map((n) => `"${n}"`).join(", ") || "(none)"}\n` +
     `Existing people (for "gift_idea", set personName to the closest EXACT name): ` +
@@ -121,6 +121,16 @@ function buildTriagePrompt(rawText: string, attempts: Attempt[], context: Triage
     `"to my ... list". Example: "Add toilet paper to my grocery list." → checklist_item with title "Toilet paper".\n` +
     `- A note about the weekly grocery scan / price scan / deal-checking list → "shopping_list_item" with the ` +
     `product as name. A note about a shopping list, errands or a to-do → "checklist_item".\n` +
+    `- IMPORTANT — new vs existing: "checklist_item" can ONLY add to a checklist that's already in the list above. ` +
+    `If the note explicitly asks to CREATE/START/MAKE a NEW checklist or list (e.g. "create a checklist called X", ` +
+    `"start a list for Y", "make a to-do list named Z"), you MUST use "checklist_with_items" instead, even if a ` +
+    `similar-sounding checklist already exists — never invent a match to an existing checklist just because none of ` +
+    `the real ones fit. Same idea for projects: "project" only for a bare project with no items mentioned; if the ` +
+    `note names specific sub-tasks for a NEW project, use "project_with_items".\n` +
+    `- NOT EVERYTHING IS A TASK. If the note is just information to remember — a fact, a thought, something to look ` +
+    `up later, a note that doesn't ask you to DO anything and doesn't clearly belong to a person/project/calendar/` +
+    `recipe/gift — use "checklist_with_items" with kind "note" (title: a short summary, body: the full text, no ` +
+    `items). This is a legitimate, safe catch-all — prefer it over guessing a structured type that doesn't really fit.\n` +
     `- Capitalize the first letter of titles and names.\n\n` +
     `Respond with ONLY valid JSON of the shape { "targetType": "...", "fields": { ... } }.\n\n` +
     `Note: "${rawText}"` +
@@ -260,7 +270,7 @@ async function processTextEntry(prisma: PrismaClient, entryId: string, userId: s
 
   const results: { segment: string; proposal: Proposal }[] = [];
   for (const segment of segments) {
-    const [proposal] = normalizeProposals(await runAiTask(prisma, "inbox_text_triage", buildTriagePrompt(segment, [], context)));
+    const [proposal] = normalizeProposals(await runAiTask(prisma, "inbox_text_triage", await buildTriagePrompt(prisma, segment, [], context)));
     results.push({ segment, proposal: correctRouting(proposal, segment, context) });
   }
 
@@ -532,7 +542,7 @@ export async function reevaluateEntry(prisma: PrismaClient, id: string, userFeed
     // re-splitting the original note again — take the first proposed item
     // even if the model returns more than one.
     const context = await loadTriageContext(prisma);
-    const raw = await runAiTask(prisma, "inbox_text_triage", buildTriagePrompt(entry.rawText!, attempts, context));
+    const raw = await runAiTask(prisma, "inbox_text_triage", await buildTriagePrompt(prisma, entry.rawText!, attempts, context));
     const [rawProposal] = normalizeProposals(raw);
     const proposal = correctRouting(rawProposal, entry.rawText!, context);
     return prisma.inboxEntry.update({ where: { id }, data: { proposal: proposal as unknown as Prisma.InputJsonValue, status: "pending" } });

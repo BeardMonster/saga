@@ -77,6 +77,8 @@ export async function updateChecklist(
     projectId?: string | null;
     description?: string | null;
     body?: string | null;
+    includeOnHome?: boolean;
+    isPinned?: boolean;
   },
 ) {
   const { completed, projectId, description, body, ...rest } = input;
@@ -140,7 +142,7 @@ export async function listQuickWins(prisma: PrismaClient) {
       isQuickWin: true,
       isComplete: false,
       deletedAt: null,
-      checklist: { userId, kind: "generic", completedAt: null, deletedAt: null },
+      checklist: { userId, kind: "generic", completedAt: null, deletedAt: null, includeOnHome: true },
     },
     include: { checklist: { select: { id: true, name: true } } },
     orderBy: { createdAt: "asc" },

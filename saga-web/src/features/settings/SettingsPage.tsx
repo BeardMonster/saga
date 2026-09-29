@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Field, Select } from "@/components/ui/field";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPatch } from "../../core/api/client";
@@ -284,6 +285,9 @@ export default function SettingsPage() {
           nothing costs money out of the box. The separate "Claude API" option is a real, distinct cost (a paid Anthropic
           API key, unrelated to any claude.ai Pro or Claude Code subscription) and is never a default anywhere.
         </p>
+        <Link to="/brain-dump/instructions" className="text-sm text-primary hover:underline">
+          Brain Dump: sorting instructions →
+        </Link>
       </div>
 
       {modelsQuery.isError && (

@@ -10,7 +10,7 @@ import ExpandableTitle from "./ExpandableTitle";
 import ChecklistItemRow from "./ChecklistItemRow";
 import MoveToPicker from "./MoveToPicker";
 import { notifyMoved } from "../../core/api/undoableMove";
-import { ArrowRightLeft, EllipsisVertical, RotateCcw, Trash2 } from "lucide-react";
+import { ArrowRightLeft, EllipsisVertical, Home, Pin, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import {
@@ -38,6 +38,8 @@ interface ChecklistData {
   body: string | null;
   completedAt: string | null;
   projectId: string | null;
+  includeOnHome: boolean;
+  isPinned: boolean;
   items: ChecklistItemData[];
 }
 
@@ -157,6 +159,16 @@ export default function ChecklistCard({
     },
   });
 
+  const toggleIncludeOnHome = useMutation({
+    mutationFn: (includeOnHome: boolean) => apiPatch(`/checklists/${checklistId}`, { includeOnHome }),
+    onSuccess: invalidate,
+  });
+
+  const togglePinned = useMutation({
+    mutationFn: (isPinned: boolean) => apiPatch(`/checklists/${checklistId}`, { isPinned }),
+    onSuccess: invalidate,
+  });
+
   const resetItems = useMutation({
     // A bulk un-complete, not a completion itself — "restore" fits the
     // "brought back to active" feel better than a generic save.
@@ -247,6 +259,17 @@ export default function ChecklistCard({
         {dragHandleProps && <DragHandle {...dragHandleProps} />}
         <ExpandableTitle value={checklist.name} onSave={(name) => renameChecklist.mutate(name)} expanded={open} onToggle={() => setOpen((o) => !o)} />
         {checklist.kind === "grocery" && <span className="ml-1 text-xs text-slate-500 dark:text-slate-500">🛒 grocery</span>}
+        {checklist.kind === "generic" && !checklist.includeOnHome && (
+          <span className="ml-1 text-xs text-slate-500 dark:text-slate-500" title="Won't appear in Today's One Thing or Quick Wins">
+            hidden from Home
+          </span>
+        )}
+        {checklist.kind === "note" && checklist.isPinned && (
+          <span className="ml-1 flex items-center gap-0.5 text-xs text-amber-700 dark:text-amber-400" title="Pinned to top">
+            <Pin className="h-3 w-3 fill-current" />
+            pinned
+          </span>
+        )}
         {checklist.completedAt && (
           <span className="ml-1 text-xs text-green-700 dark:text-green-400">
             ✓ Completed {new Date(checklist.completedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
@@ -293,6 +316,24 @@ export default function ChecklistCard({
               <DropdownMenuItem onSelect={() => setTimeout(() => setPickingProject(true), 0)}>
                 <ArrowRightLeft className="h-4 w-4" /> Move into a project…
               </DropdownMenuItem>
+            )}
+            {checklist.kind === "generic" && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setTimeout(() => toggleIncludeOnHome.mutate(!checklist.includeOnHome), 0)}>
+                  <Home className="h-4 w-4" />
+                  {checklist.includeOnHome ? "Hide from Home page suggestions" : "Show on Home page (Today's One Thing, Quick Wins)"}
+                </DropdownMenuItem>
+              </>
+            )}
+            {checklist.kind === "note" && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setTimeout(() => togglePinned.mutate(!checklist.isPinned), 0)}>
+                  <Pin className="h-4 w-4" />
+                  {checklist.isPinned ? "Unpin" : "Pin to top"}
+                </DropdownMenuItem>
+              </>
             )}
             {checklist.items.some((i) => i.isComplete) && (
               <>

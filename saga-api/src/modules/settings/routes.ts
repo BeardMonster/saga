@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { AiProvider } from "@prisma/client";
 import { ok, err } from "../../lib/envelope.js";
 import * as service from "./service.js";
+import { listTargetTypeInstructions, setTargetTypeInstructions } from "../inbox/targetTypes.js";
 
 export default async function settingsRoutes(server: FastifyInstance) {
   server.get("/settings/ai-tasks", async () => ok(await service.listAiTaskSettings(server.prisma)));
@@ -28,4 +29,20 @@ export default async function settingsRoutes(server: FastifyInstance) {
   });
 
   server.get("/settings/claude-cli-token", async () => ok(service.getClaudeCliTokenStatus()));
+
+  // Same data whether reached from Settings or from Brain Dump directly.
+  server.get("/settings/target-type-instructions", async () => ok(await listTargetTypeInstructions(server.prisma)));
+
+  server.patch<{ Params: { targetType: string }; Body: { notes: string } }>(
+    "/settings/target-type-instructions/:targetType",
+    async (request, reply) => {
+      try {
+        const updated = await setTargetTypeInstructions(server.prisma, request.params.targetType, request.body?.notes ?? "");
+        return ok(updated, "Saved");
+      } catch (error) {
+        reply.code(400);
+        return err((error as Error).message, 400);
+      }
+    },
+  );
 }

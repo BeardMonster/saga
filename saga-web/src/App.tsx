@@ -17,6 +17,8 @@ import RecipesPage from "./features/recipes/RecipesPage";
 import GroceryPage from "./features/grocery/GroceryPage";
 import InboxPage from "./features/inbox/InboxPage";
 import InsultsPage from "./features/insults/InsultsPage";
+import TargetTypeInstructionsPage from "./features/inbox/TargetTypeInstructionsPage";
+import NotesPage from "./features/notes/NotesPage";
 import TrashPage from "./features/trash/TrashPage";
 import SettingsPage from "./features/settings/SettingsPage";
 import AlertsPage from "./features/alerts/AlertsPage";
@@ -66,6 +68,8 @@ export default function App() {
             <Route path="/brain-dump" element={<InboxPage />} />
             <Route path="/inbox" element={<Navigate to="/brain-dump" replace />} />
             <Route path="/insults" element={<InsultsPage />} />
+            <Route path="/brain-dump/instructions" element={<TargetTypeInstructionsPage />} />
+            <Route path="/notes" element={<NotesPage />} />
             <Route path="/trash" element={<TrashPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/alerts" element={<AlertsPage />} />

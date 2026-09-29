@@ -1,5 +1,6 @@
 import AutoGrowTextarea from "../../shared/components/AutoGrowTextarea";
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -48,9 +49,10 @@ const TARGET_TYPE_LABELS: Record<string, string> = {
   project: "Project",
   recipe: "Recipe",
   shopping_list_item: "Weekly grocery scan list",
-  checklist_with_items: "Checklist or note",
+  checklist_with_items: "New checklist",
   person_note: "Note on a person's page",
   grocery_receipt: "Grocery receipt",
+  project_with_items: "New project",
 };
 
 function mediaUrl(path: string): string {
@@ -321,7 +323,11 @@ function EntryCard({ entry, onChanged }: { entry: InboxEntry; onChanged: () => v
       {entry.proposal && (
         <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-3">
           <p className="text-xs font-medium text-blue-600 dark:text-blue-300 uppercase tracking-wide">
-            → {TARGET_TYPE_LABELS[targetType!] ?? targetType}
+            →{" "}
+            {targetType === "checklist_with_items" &&
+            (fields.kind === "note" || (typeof fields.body === "string" && fields.body.trim() && !(fields.items as string[] | undefined)?.length))
+              ? "New note"
+              : (TARGET_TYPE_LABELS[targetType!] ?? targetType)}
           </p>
 
           {targetType === "checklist_item" && (
@@ -498,7 +504,12 @@ export default function InboxPage() {
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-4">
       <div>
-        <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Brain Dump</h2>
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Brain Dump</h2>
+          <Link to="/brain-dump/instructions" className="shrink-0 text-sm text-primary hover:underline mt-1">
+            Edit sorting instructions →
+          </Link>
+        </div>
         <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">
           Paste a quick note, or upload a recipe card photo or a recording — review what it proposes before anything's added.
         </p>
