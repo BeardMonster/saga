@@ -11,6 +11,7 @@ import BirthdayReminders from "./BirthdayReminders";
 import ImportNotesDialog from "./ImportNotesDialog";
 import NoteSectionCard from "./NoteSectionCard";
 import ScrollChips from "../../shared/components/ScrollChips";
+import { useDraftState } from "../../shared/hooks/useDraftState";
 import type { Person, PersonNote, PersonSection, ReminderCascade } from "./types";
 
 function noteMatches(note: PersonNote, q: string): boolean {
@@ -44,9 +45,26 @@ export default function PersonPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [includePrivate, setIncludePrivate] = useState(false);
-  const [newSection, setNewSection] = useState("");
+  const [newSection, setNewSection] = useDraftState(`saga-draft-person-section-${id}`);
   const [newSectionPrivate, setNewSectionPrivate] = useState(false);
-  const [importing, setImporting] = useState(false);
+  // Persisted (not just the pasted text below) so a mobile tab reload mid-paste
+  // reopens the dialog instead of restoring text into a dialog that's gone.
+  const [importing, setImporting] = useState(() => {
+    try {
+      return localStorage.getItem(`saga-draft-import-notes-open-${id}`) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (importing) localStorage.setItem(`saga-draft-import-notes-open-${id}`, "1");
+      else localStorage.removeItem(`saga-draft-import-notes-open-${id}`);
+    } catch {
+      /* storage unavailable — dialog just won't reopen after a reload */
+    }
+  }, [importing, id]);
 
   const peopleQuery = useQuery({ queryKey: ["people"], queryFn: () => apiGet<Person[]>("/people") });
   const remindersQuery = useQuery({ queryKey: ["reminders"], queryFn: () => apiGet<ReminderCascade[]>("/reminders") });

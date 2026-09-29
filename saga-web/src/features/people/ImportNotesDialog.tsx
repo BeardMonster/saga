@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import RenderGuard from "../../shared/components/RenderGuard";
+import { useDraftState, clearDraft } from "../../shared/hooks/useDraftState";
 
 interface ParsedChild {
   label: string | null;
@@ -44,7 +45,8 @@ export default function ImportNotesDialog({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [text, setText] = useState("");
+  const draftKey = `saga-draft-import-notes-text-${personId}`;
+  const [text, setText] = useDraftState(draftKey);
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [slow, setSlow] = useState(false);
@@ -97,9 +99,21 @@ export default function ImportNotesDialog({
         () => apiPost(`/people/${personId}/import/undo`, { noteIds }),
         "Import undone",
       );
+      clearDraft(draftKey);
       onClose();
     },
   });
+
+  // Cancelling (not just a successful import) also discards the draft — an
+  // abandoned paste shouldn't silently reappear the next time this person's
+  // import dialog is opened. Cleared synchronously via clearDraft, not
+  // setText(""): onClose() unmounts this component in the same render (the
+  // parent's `importing` flag flips off), which can skip the persistence
+  // effect setText("") would otherwise schedule, leaving the old value stuck.
+  const handleCancel = () => {
+    clearDraft(draftKey);
+    onClose();
+  };
 
   const busy = preview.isPending || save.isPending;
   const lineCount = text.split("\n").filter((l) => l.trim()).length;
@@ -113,7 +127,7 @@ export default function ImportNotesDialog({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
+    <Dialog open onOpenChange={(open) => !open && !busy && handleCancel()}>
       <DialogContent ref={contentRef} className="max-h-[92vh] w-[calc(100%-1rem)] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Import notes from Keep</DialogTitle>
@@ -141,7 +155,7 @@ export default function ImportNotesDialog({
             )}
             {preview.isError && <p className="text-sm text-red-600 dark:text-red-400">Couldn't read that — check your connection and try again.</p>}
             <DialogFooter>
-              <Button variant="ghost" onClick={onClose} disabled={preview.isPending}>
+              <Button variant="ghost" onClick={handleCancel} disabled={preview.isPending}>
                 Cancel
               </Button>
               <Button onClick={() => preview.mutate()} disabled={!text.trim() || preview.isPending}>

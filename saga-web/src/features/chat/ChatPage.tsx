@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Select, Textarea } from "@/components/ui/field";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet, apiPost } from "../../core/api/client";
+import { useDraftState } from "../../shared/hooks/useDraftState";
 
 interface Message {
   role: "user" | "assistant";
@@ -73,7 +74,7 @@ export default function ChatPage() {
   const [model, setModel] = useState<string>(initial.current?.model ?? "");
   const [messages, setMessages] = useState<Message[]>(initial.current?.messages ?? []);
   const [pendingJobId, setPendingJobId] = useState<string | null>(initial.current?.pendingJobId ?? null);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useDraftState("saga-draft-chat-input");
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Pick a sensible default model once the real list loads — prefer the

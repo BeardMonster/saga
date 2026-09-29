@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, apiPatch, apiDelete } from "../../core/api/client";
 import { useConfirm } from "../../shared/hooks/useConfirm";
 import InlineEditText from "../../shared/components/InlineEditText";
+import { useDraftState } from "../../shared/hooks/useDraftState";
 
 interface Insult {
   id: string;
@@ -16,8 +17,8 @@ interface Insult {
 export default function InsultsPage() {
   const queryClient = useQueryClient();
   const { confirm, dialog } = useConfirm();
-  const [bulkText, setBulkText] = useState("");
-  const [videoUrl, setVideoUrl] = useState("");
+  const [bulkText, setBulkText] = useDraftState("saga-draft-insults-bulk-text");
+  const [videoUrl, setVideoUrl] = useDraftState("saga-draft-insults-video-url");
   const [importResult, setImportResult] = useState<string | null>(null);
 
   const { data } = useQuery({ queryKey: ["insults"], queryFn: () => apiGet<Insult[]>("/insults") });

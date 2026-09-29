@@ -5,6 +5,7 @@ import ChecklistCard from "../../shared/components/ChecklistCard";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { SortableList } from "../../shared/components/SortableList";
+import { useDraftState } from "../../shared/hooks/useDraftState";
 
 interface NoteSummary {
   id: string;
@@ -24,8 +25,8 @@ interface NoteSummary {
 // catch-all for information that isn't really a task.
 export default function NotesPage() {
   const queryClient = useQueryClient();
-  const [newName, setNewName] = useState("");
-  const [newBody, setNewBody] = useState("");
+  const [newName, setNewName] = useDraftState("saga-draft-note-title");
+  const [newBody, setNewBody] = useDraftState("saga-draft-note-body");
   const [search, setSearch] = useState("");
 
   const { data } = useQuery({

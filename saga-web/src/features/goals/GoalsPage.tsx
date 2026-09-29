@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { celebrate, originOf } from "../../shared/lib/celebrate";
+import { useDraftState } from "../../shared/hooks/useDraftState";
 
 interface Goal {
   id: string;
@@ -59,8 +60,8 @@ function customLabel(amount: number, unit: CustomUnit): string {
 export default function GoalsPage() {
   const queryClient = useQueryClient();
   const { confirm, dialog } = useConfirm();
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [title, setTitle] = useDraftState("saga-draft-goal-title");
+  const [description, setDescription] = useDraftState("saga-draft-goal-description");
   const [horizon, setHorizon] = useState<Horizon | "custom">("one_year");
   const [customAmount, setCustomAmount] = useState("");
   const [customUnit, setCustomUnit] = useState<CustomUnit>("years");

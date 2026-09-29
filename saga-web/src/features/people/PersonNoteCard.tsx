@@ -19,6 +19,7 @@ import {
 import NoteItemRow from "./NoteItemRow";
 import MoveToPicker from "../../shared/components/MoveToPicker";
 import { notifyMoved } from "../../core/api/undoableMove";
+import { useDraftState } from "../../shared/hooks/useDraftState";
 import type { PersonNote } from "./types";
 
 // A titled card inside a section: a bullet list or a free paragraph.
@@ -41,7 +42,7 @@ export default function PersonNoteCard({
 }) {
   const queryClient = useQueryClient();
   const { confirm, dialog } = useConfirm();
-  const [lines, setLines] = useState("");
+  const [lines, setLines] = useDraftState(`saga-draft-person-note-lines-${note.id}`);
   const [pickingSection, setPickingSection] = useState(false);
 
   const invalidate = () => {

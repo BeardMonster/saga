@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, apiPatch } from "../../core/api/client";
 import ChecklistCard from "../../shared/components/ChecklistCard";
@@ -7,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import ProjectCard from "../projects/ProjectCard";
 import AutoGrowTextarea from "../../shared/components/AutoGrowTextarea";
+import { useDraftState } from "../../shared/hooks/useDraftState";
 
 interface ProjectSummary {
   id: string;
@@ -26,8 +26,8 @@ interface ChecklistSummary {
 
 export default function ChecklistsPage() {
   const queryClient = useQueryClient();
-  const [newName, setNewName] = useState("");
-  const [newDescription, setNewDescription] = useState("");
+  const [newName, setNewName] = useDraftState("saga-draft-checklist-name");
+  const [newDescription, setNewDescription] = useDraftState("saga-draft-checklist-description");
 
   const { data } = useQuery({
     queryKey: ["checklists", "standalone"],

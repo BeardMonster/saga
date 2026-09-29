@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { CheckboxField, Field, Input } from "@/components/ui/field";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import CadencePicker from "./CadencePicker";
+import { useDraftState } from "../../shared/hooks/useDraftState";
 
 interface ReminderInstance {
   id: string;
@@ -152,7 +153,7 @@ function ArchivedCascadeRow({ cascade, onRestore }: { cascade: ReminderCascade; 
 export default function RemindersPage() {
   const queryClient = useQueryClient();
   const { confirm, dialog } = useConfirm();
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useDraftState("saga-draft-reminder-title");
   const [anchorDate, setAnchorDate] = useState("");
   const [cadenceDays, setCadenceDays] = useState<number[]>(DEFAULT_CADENCE_DAYS);
   const [repeatAnnually, setRepeatAnnually] = useState(false);

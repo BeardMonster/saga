@@ -6,6 +6,7 @@ import { CheckboxField, Field, Input, Textarea } from "@/components/ui/field";
 import ProjectCard from "./ProjectCard";
 import { SortableList } from "../../shared/components/SortableList";
 import AutoGrowTextarea from "../../shared/components/AutoGrowTextarea";
+import { useDraftState } from "../../shared/hooks/useDraftState";
 
 interface Project {
   id: string;
@@ -18,8 +19,8 @@ interface Project {
 
 export default function ProjectsPage() {
   const queryClient = useQueryClient();
-  const [newName, setNewName] = useState("");
-  const [newDescription, setNewDescription] = useState("");
+  const [newName, setNewName] = useDraftState("saga-draft-project-name");
+  const [newDescription, setNewDescription] = useDraftState("saga-draft-project-description");
   const [includeChecklist, setIncludeChecklist] = useState(false);
 
   const { data } = useQuery({

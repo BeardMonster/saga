@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CheckboxField, Field, Input, Textarea } from "@/components/ui/field";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, apiPatch, apiDelete, apiUpload } from "../../core/api/client";
@@ -11,6 +11,7 @@ import { deleteWithUndo } from "../../core/api/undoableDelete";
 import { useConfirm } from "../../shared/hooks/useConfirm";
 import { SortableList, DragHandle, type SortableHandleProps } from "../../shared/components/SortableList";
 import { COMMON_ALLERGENS } from "../../shared/lib/allergens";
+import { useDraftState } from "../../shared/hooks/useDraftState";
 
 interface ProgressStep {
   message: string;
@@ -407,6 +408,8 @@ function RecipeCard({
   );
 }
 
+const ADD_MODE_KEY = "saga-draft-recipe-add-mode";
+
 export default function RecipesPage() {
   const queryClient = useQueryClient();
   const { confirm, dialog } = useConfirm();
@@ -414,8 +417,27 @@ export default function RecipesPage() {
   const [hideAllergens, setHideAllergens] = useState<string[]>([]);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  const [addMode, setAddMode] = useState<"menu" | "write" | "paste" | null>(null);
-  const [pasteText, setPasteText] = useState("");
+  // Persisted (not just pasteText below) so a mobile tab reload mid-paste
+  // reopens the paste form instead of restoring text into a form that's gone.
+  const [addMode, setAddMode] = useState<"menu" | "write" | "paste" | null>(() => {
+    try {
+      const saved = localStorage.getItem(ADD_MODE_KEY);
+      return saved === "write" || saved === "paste" ? saved : null;
+    } catch {
+      return null;
+    }
+  });
+  const [pasteText, setPasteText] = useDraftState("saga-draft-recipe-paste-text");
+
+  useEffect(() => {
+    try {
+      if (addMode === "write" || addMode === "paste") localStorage.setItem(ADD_MODE_KEY, addMode);
+      else localStorage.removeItem(ADD_MODE_KEY);
+    } catch {
+      /* storage unavailable — form just won't reopen after a reload */
+    }
+  }, [addMode]);
+
   const closeAdd = () => {
     setAddMode(null);
     setPasteText("");
