@@ -462,10 +462,35 @@ function EntryCard({ entry, onChanged }: { entry: InboxEntry; onChanged: () => v
   );
 }
 
+// Switching to another app (e.g. copying the next chunk from Keep) and back
+// can make a mobile browser reclaim Saga's backgrounded tab — a real reload,
+// not just a background refetch, which would otherwise silently wipe
+// whatever was typed here mid-paste. Persisted so a reload restores it.
+const DRAFT_KEY = "saga-brain-dump-draft";
+
+function loadDraft(): string {
+  try {
+    return localStorage.getItem(DRAFT_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function saveDraft(text: string) {
+  try {
+    if (text) localStorage.setItem(DRAFT_KEY, text);
+    else localStorage.removeItem(DRAFT_KEY);
+  } catch {
+    /* storage unavailable — draft just won't survive a reload */
+  }
+}
+
 export default function InboxPage() {
   const queryClient = useQueryClient();
-  const [text, setText] = useState("");
+  const [text, setText] = useState(loadDraft);
   const { confirm, dialog } = useConfirm();
+
+  useEffect(() => saveDraft(text), [text]);
 
   const { data } = useQuery({
     queryKey: ["inbox"],
