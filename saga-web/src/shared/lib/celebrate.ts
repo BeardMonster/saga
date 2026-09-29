@@ -298,6 +298,13 @@ function activeTheme(): SoundTheme {
 const SURPRISE_CHANCE = 0.2;
 const SURPRISE_TIERS: CelebrationTier[] = ["checklist", "project"];
 
+// For a "Preview" button in Settings — always plays regardless of the mute
+// toggle, same reasoning as soundOn/soundOff (an explicit request to hear
+// it, not a background cue that should honor mute).
+export function previewPartyCheer() {
+  playPartyCheer();
+}
+
 // `origin` is where the confetti bursts from (usually the clicked element);
 // defaults to upper-middle of the screen when not given.
 // `sound` overrides the tier's own chime (confetti/haptics still scale with

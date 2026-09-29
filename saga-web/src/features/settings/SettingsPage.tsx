@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
 import { Field, Select } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPatch } from "../../core/api/client";
+import { previewPartyCheer } from "../../shared/lib/celebrate";
 
 interface HealthData {
   status: string;
@@ -295,6 +297,16 @@ export default function SettingsPage() {
           Couldn't reach Ollama to list pulled models — is it running?
         </p>
       )}
+
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 shadow-sm space-y-2">
+        <p className="font-medium text-slate-800 dark:text-slate-100 text-sm">Sound & celebrations</p>
+        <p className="text-sm text-slate-600 dark:text-slate-400">
+          Completing a checklist or project has a 1-in-5 chance of playing this rare alternate cheer instead of the usual chime.
+        </p>
+        <Button type="button" variant="outline" onClick={() => previewPartyCheer()}>
+          Preview celebration sound
+        </Button>
+      </div>
 
       <ClaudeCliTokenCard />
 
