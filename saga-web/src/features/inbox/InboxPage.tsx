@@ -483,11 +483,6 @@ export default function InboxPage() {
     },
   });
 
-  const submitPhotos = useMutation({
-    mutationFn: (files: File[]) => apiUpload("/inbox/photo", files),
-    onSuccess: invalidate,
-  });
-
   const submitMedia = useMutation({
     mutationFn: (files: File[]) => apiUpload("/inbox/media", files),
     onSuccess: invalidate,
@@ -511,7 +506,7 @@ export default function InboxPage() {
           </Link>
         </div>
         <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">
-          Paste a quick note, or upload a recipe card photo or a recording — review what it proposes before anything's added.
+          Paste a quick note, or upload a recipe recording — review what it proposes before anything's added.
         </p>
       </div>
 
@@ -533,13 +528,9 @@ export default function InboxPage() {
       </form>
 
       <div className="flex flex-wrap gap-2">
-        <FilePickerButton label="📷 Recipe card photos" accept="image/*" multiple onFiles={(files) => submitPhotos.mutate(files)} />
         <FilePickerButton label="🎙️ Recipe recording" accept="audio/*,video/*" onFiles={(files) => submitMedia.mutate(files)} />
       </div>
-      <p className="text-xs text-slate-600 dark:text-slate-400">For a recipe card, pick the front and back photos together.</p>
-      {(submitPhotos.isPending || submitMedia.isPending) && (
-        <p className="text-sm text-slate-600 dark:text-slate-400">Reading it… this can take a little while.</p>
-      )}
+      {submitMedia.isPending && <p className="text-sm text-slate-600 dark:text-slate-400">Reading it… this can take a little while.</p>}
 
       {waiting > 1 && (
         <div className="flex justify-end">
