@@ -253,6 +253,11 @@ model ReminderCascade {
   isRecurringAnnually Boolean     @default(false)
   createdAt   DateTime            @default(now())
   deletedAt   DateTime? // soft delete — see Project.deletedAt
+  // A one-time removal from the active list, kept forever unless the user
+  // deletes it too — distinct from deletedAt/Trash, which auto-purges after
+  // 30 days. Same reasoning as Checklist.archivedAt. Also silences
+  // notifications, same as deletedAt (see processDueReminders).
+  archivedAt  DateTime?
 
   instances ReminderInstance[]
 

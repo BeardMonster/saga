@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { EllipsisVertical, Pencil, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, EllipsisVertical, Pencil, Trash2 } from "lucide-react";
 import { apiGet, apiPost, apiPatch } from "../../core/api/client";
 import { deleteWithUndo } from "../../core/api/undoableDelete";
 import { useConfirm } from "../../shared/hooks/useConfirm";
@@ -34,7 +34,7 @@ function toDateInputValue(iso: string): string {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 }
 
-function CascadeCard({ cascade, onDelete }: { cascade: ReminderCascade; onDelete: () => void }) {
+function CascadeCard({ cascade, onArchive, onDelete }: { cascade: ReminderCascade; onArchive: () => void; onDelete: () => void }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(cascade.title);
@@ -108,6 +108,9 @@ function CascadeCard({ cascade, onDelete }: { cascade: ReminderCascade; onDelete
             <DropdownMenuItem onSelect={() => setEditing(true)}>
               <Pencil className="h-4 w-4" /> Edit
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setTimeout(onArchive, 0)}>
+              <Archive className="h-4 w-4" /> Archive
+            </DropdownMenuItem>
             <DropdownMenuItem destructive onSelect={() => setTimeout(onDelete, 0)}>
               <Trash2 className="h-4 w-4" /> Delete
             </DropdownMenuItem>
@@ -128,6 +131,24 @@ function CascadeCard({ cascade, onDelete }: { cascade: ReminderCascade; onDelete
   );
 }
 
+// Archived cascades are a one-time tuck-away, not something edited in place
+// — restore it first if it needs changes. Kept intentionally simpler than
+// CascadeCard (no edit form, no instance chips) since there's nothing
+// actionable here beyond bringing it back.
+function ArchivedCascadeRow({ cascade, onRestore }: { cascade: ReminderCascade; onRestore: () => void }) {
+  return (
+    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-4 flex items-start justify-between gap-2">
+      <div className="min-w-0">
+        <h4 className="font-medium text-slate-700 dark:text-slate-300 break-words">{cascade.title}</h4>
+        <p className="text-sm text-slate-500 dark:text-slate-500">Date: {formatDateOnly(cascade.anchorDate)}</p>
+      </div>
+      <Button variant="outline" size="sm" className="shrink-0" onClick={onRestore}>
+        <ArchiveRestore className="h-4 w-4" /> Restore
+      </Button>
+    </div>
+  );
+}
+
 export default function RemindersPage() {
   const queryClient = useQueryClient();
   const { confirm, dialog } = useConfirm();
@@ -139,6 +160,10 @@ export default function RemindersPage() {
   const { data } = useQuery({
     queryKey: ["reminders"],
     queryFn: () => apiGet<ReminderCascade[]>("/reminders"),
+  });
+  const archivedQuery = useQuery({
+    queryKey: ["reminders", "archived"],
+    queryFn: () => apiGet<ReminderCascade[]>("/reminders/archived"),
   });
 
   const createCascade = useMutation({
@@ -163,7 +188,18 @@ export default function RemindersPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["reminders"] }),
   });
 
+  const archiveCascade = useMutation({
+    mutationFn: (id: string) => apiPost(`/reminders/${id}/archive`, undefined, { sound: "move" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["reminders"] }),
+  });
+
+  const unarchiveCascade = useMutation({
+    mutationFn: (id: string) => apiPost(`/reminders/${id}/unarchive`, undefined, { sound: "restore" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["reminders"] }),
+  });
+
   const cascades = data?.data ?? [];
+  const archivedCascades = archivedQuery.data?.data ?? [];
 
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-4">
@@ -202,6 +238,7 @@ export default function RemindersPage() {
           <CascadeCard
             key={c.id}
             cascade={c}
+            onArchive={() => archiveCascade.mutate(c.id)}
             onDelete={async () => {
               if (await confirm(`Move "${c.title}" to Trash? You can restore it within 30 days.`)) deleteCascade.mutate(c.id);
             }}
@@ -209,6 +246,17 @@ export default function RemindersPage() {
         ))}
         {cascades.length === 0 && <p className="text-slate-600 dark:text-slate-400 text-sm">No reminders set yet.</p>}
       </div>
+
+      {archivedCascades.length > 0 && (
+        <div className="pt-2 space-y-3">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Archived ({archivedCascades.length})
+          </h3>
+          {archivedCascades.map((c) => (
+            <ArchivedCascadeRow key={c.id} cascade={c} onRestore={() => unarchiveCascade.mutate(c.id)} />
+          ))}
+        </div>
+      )}
       {dialog}
     </div>
   );

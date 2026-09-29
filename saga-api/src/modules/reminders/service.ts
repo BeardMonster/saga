@@ -5,10 +5,27 @@ import { sendReminder } from "../../lib/ntfy.js";
 export async function listCascades(prisma: PrismaClient) {
   const userId = await getCurrentUserId(prisma);
   return prisma.reminderCascade.findMany({
-    where: { userId, deletedAt: null },
+    where: { userId, deletedAt: null, archivedAt: null },
     orderBy: { anchorDate: "asc" },
     include: { instances: { orderBy: { fireAt: "asc" } }, goal: true, person: true },
   });
+}
+
+export async function listArchivedCascades(prisma: PrismaClient) {
+  const userId = await getCurrentUserId(prisma);
+  return prisma.reminderCascade.findMany({
+    where: { userId, deletedAt: null, archivedAt: { not: null } },
+    orderBy: { archivedAt: "desc" },
+    include: { instances: { orderBy: { fireAt: "asc" } }, goal: true, person: true },
+  });
+}
+
+export async function archiveCascade(prisma: PrismaClient, id: string) {
+  return prisma.reminderCascade.update({ where: { id }, data: { archivedAt: new Date() } });
+}
+
+export async function unarchiveCascade(prisma: PrismaClient, id: string) {
+  return prisma.reminderCascade.update({ where: { id }, data: { archivedAt: null } });
 }
 
 // anchor is always a date-only value (UTC midnight — see schema.prisma's
@@ -146,12 +163,14 @@ const STALE_AFTER_MS = 2 * 24 * 60 * 60 * 1000;
 export async function processDueReminders(prisma: PrismaClient) {
   const due = await prisma.reminderInstance.findMany({
     // A reminder stays silent while what it belongs to (the person, goal or
-    // calendar event) is sitting in Trash; it resumes if that is restored.
+    // calendar event) is sitting in Trash, or while the cascade itself is
+    // archived; it resumes if that is restored/unarchived.
     where: {
       sentAt: null,
       fireAt: { lte: new Date() },
       cascade: {
         deletedAt: null,
+        archivedAt: null,
         OR: [{ personId: null }, { person: { deletedAt: null } }],
         AND: [
           { OR: [{ goalId: null }, { goal: { deletedAt: null } }] },

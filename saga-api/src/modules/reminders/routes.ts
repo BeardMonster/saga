@@ -45,6 +45,21 @@ export default async function reminderRoutes(server: FastifyInstance) {
     return ok(null, "Moved to Trash");
   });
 
+  server.get("/reminders/archived", async () => {
+    const cascades = await service.listArchivedCascades(server.prisma);
+    return ok(cascades);
+  });
+
+  server.post<{ Params: { id: string } }>("/reminders/:id/archive", async (request) => {
+    const cascade = await service.archiveCascade(server.prisma, request.params.id);
+    return ok(cascade, "Archived");
+  });
+
+  server.post<{ Params: { id: string } }>("/reminders/:id/unarchive", async (request) => {
+    const cascade = await service.unarchiveCascade(server.prisma, request.params.id);
+    return ok(cascade, "Restored");
+  });
+
   // Manual trigger for testing — the scheduler calls the same service
   // function automatically every minute (see scheduler.ts).
   server.post("/reminders/process-due", async () => {
