@@ -3,7 +3,7 @@ import { Field, Select } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPatch } from "../../core/api/client";
-import { previewPartyCheer } from "../../shared/lib/celebrate";
+import { previewSurpriseSound } from "../../shared/lib/celebrate";
 
 interface HealthData {
   status: string;
@@ -303,7 +303,7 @@ export default function SettingsPage() {
         <p className="text-sm text-slate-600 dark:text-slate-400">
           Completing a checklist or project has a 1-in-5 chance of playing this rare alternate cheer instead of the usual chime.
         </p>
-        <Button type="button" variant="outline" onClick={() => previewPartyCheer()}>
+        <Button type="button" variant="outline" onClick={() => previewSurpriseSound()}>
           Preview celebration sound
         </Button>
       </div>

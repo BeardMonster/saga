@@ -1,9 +1,12 @@
 // Completion rewards, tiered so bigger accomplishments feel bigger (an
 // immediate, escalating payoff is the point — see README's ADHD design
-// principles). Sounds are synthesized with the Web Audio API (no asset
-// files); confetti is plain DOM elements animated with the Web Animations
-// API (no library). Sound can be muted via the nav toggle; confetti honors
-// the OS "reduce motion" setting.
+// principles). Every regular sound is synthesized with the Web Audio API (no
+// asset files) — the one exception is the rare checklist/project "surprise"
+// (see SURPRISE_* below), a real recorded clip served from public/sounds/
+// since that's a specific existing sound, not something worth trying to
+// recreate from oscillators. Confetti is plain DOM elements animated with
+// the Web Animations API (no library). Sound can be muted via the nav
+// toggle; confetti honors the OS "reduce motion" setting.
 //
 // Every sound is organized into a THEME (see "Sound themes" below) — the
 // rest of the app only ever asks for a symbolic name ("save", the "item"
@@ -123,13 +126,13 @@ function chantBlip(ctx: AudioContext, start: number, baseFreq: number, duration:
   });
 }
 
-// A rare alternate "surprise" cheer (see celebrate() below) — a synthesized
-// stand-in for a group chant + pop, not an attempt at reproducing any real
-// recording (Web Audio oscillators/noise can evoke that shape — a crowd
-// swell, a few rising chant blips, a bright pop — but can't reproduce actual
-// vocal formants). Built from raw nodes rather than playNotes since it needs
-// pitch envelopes and a noise layer, not fixed-frequency notes.
-function playPartyCheer() {
+// A synthesized crowd-chant-and-pop cheer — built as a candidate for the
+// checklist/project "surprise" sound, but Brandon preferred the real Grunt
+// Birthday Party clip for that slot (see SURPRISE_AUDIO_URL below) and asked
+// to keep this one for a different use later rather than delete it. Not
+// wired to any trigger yet. Built from raw nodes rather than playNotes since
+// it needs pitch envelopes and a noise layer, not fixed-frequency notes.
+export function playPartyCheer() {
   const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
   if (!AudioContextClass) return;
   audioCtx = audioCtx ?? new AudioContextClass();
@@ -297,12 +300,28 @@ function activeTheme(): SoundTheme {
 // that's already the rarest, biggest celebration.
 const SURPRISE_CHANCE = 0.2;
 const SURPRISE_TIERS: CelebrationTier[] = ["checklist", "project"];
+const SURPRISE_AUDIO_URL = "/sounds/grunt-birthday-party.mp3";
+
+// Reused across calls rather than a `new Audio()` per play, so a rapid
+// double-completion doesn't leave a prior instance's decode/fetch racing
+// the new one — `currentTime = 0` just restarts it from the top.
+let surpriseAudioEl: HTMLAudioElement | null = null;
+
+function playSurpriseClip() {
+  try {
+    surpriseAudioEl = surpriseAudioEl ?? new Audio(SURPRISE_AUDIO_URL);
+    surpriseAudioEl.currentTime = 0;
+    void surpriseAudioEl.play();
+  } catch {
+    /* playback blocked/unsupported — silently skip, same as other sound failures */
+  }
+}
 
 // For a "Preview" button in Settings — always plays regardless of the mute
 // toggle, same reasoning as soundOn/soundOff (an explicit request to hear
 // it, not a background cue that should honor mute).
-export function previewPartyCheer() {
-  playPartyCheer();
+export function previewSurpriseSound() {
+  playSurpriseClip();
 }
 
 // `origin` is where the confetti bursts from (usually the clicked element);
@@ -313,7 +332,7 @@ export function previewPartyCheer() {
 export function celebrate(tier: CelebrationTier, origin?: { x: number; y: number }, sound?: UiSound) {
   const theme = activeTheme();
   const surprise = !sound && SURPRISE_TIERS.includes(tier) && Math.random() < SURPRISE_CHANCE;
-  if (isSoundOn()) (sound ? () => playUiSound(sound) : surprise ? playPartyCheer : theme.celebrations[tier])();
+  if (isSoundOn()) (sound ? () => playUiSound(sound) : surprise ? playSurpriseClip : theme.celebrations[tier])();
   try {
     navigator.vibrate?.(theme.haptics[tier]);
   } catch {
