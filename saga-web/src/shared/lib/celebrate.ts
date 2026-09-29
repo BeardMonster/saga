@@ -77,6 +77,82 @@ function playNotes(freqs: number[], opts: { step: number; type: OscillatorType; 
   });
 }
 
+// A short burst of filtered white noise — the "crowd" half of a cheer,
+// underneath the chant blips below. Not built from playNotes since it needs
+// a noise buffer, not an oscillator.
+function noiseBurst(ctx: AudioContext, start: number, duration: number, opts: { volume: number; filterFreq: number; filterQ?: number }) {
+  const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * duration), ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  const noise = ctx.createBufferSource();
+  noise.buffer = buffer;
+  const filter = ctx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.value = opts.filterFreq;
+  filter.Q.value = opts.filterQ ?? 0.7;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0, start);
+  gain.gain.linearRampToValueAtTime(opts.volume, start + 0.03);
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+  noise.connect(filter).connect(gain).connect(ctx.destination);
+  noise.start(start);
+  noise.stop(start + duration + 0.05);
+}
+
+// One "wort!" — a pair of slightly detuned sawtooth oscillators (the
+// detuning is what gives it a rough, chanting-voices texture instead of a
+// clean synth tone) pitch-bent upward through a lowpass filter to round off
+// the sawtooth's harsh edge into something closer to a shout than a buzz.
+function chantBlip(ctx: AudioContext, start: number, baseFreq: number, duration: number, volume: number) {
+  [-6, 6].forEach((detune) => {
+    const osc = ctx.createOscillator();
+    osc.type = "sawtooth";
+    osc.detune.value = detune;
+    osc.frequency.setValueAtTime(baseFreq, start);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.6, start + duration * 0.7);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 900;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(volume, start + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    osc.connect(filter).connect(gain).connect(ctx.destination);
+    osc.start(start);
+    osc.stop(start + duration + 0.05);
+  });
+}
+
+// A rare alternate "surprise" cheer (see celebrate() below) — a synthesized
+// stand-in for a group chant + pop, not an attempt at reproducing any real
+// recording (Web Audio oscillators/noise can evoke that shape — a crowd
+// swell, a few rising chant blips, a bright pop — but can't reproduce actual
+// vocal formants). Built from raw nodes rather than playNotes since it needs
+// pitch envelopes and a noise layer, not fixed-frequency notes.
+function playPartyCheer() {
+  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+  if (!AudioContextClass) return;
+  audioCtx = audioCtx ?? new AudioContextClass();
+  const ctx = audioCtx;
+  if (ctx.state === "suspended") void ctx.resume();
+  const now = ctx.currentTime;
+
+  noiseBurst(ctx, now, 0.7, { volume: 0.12, filterFreq: 1800 });
+  [0, 0.2, 0.4].forEach((offset) => chantBlip(ctx, now + offset, 150, 0.16, 0.22));
+
+  const pop = ctx.createOscillator();
+  pop.type = "triangle";
+  pop.frequency.setValueAtTime(1200, now + 0.58);
+  pop.frequency.exponentialRampToValueAtTime(2000, now + 0.68);
+  const popGain = ctx.createGain();
+  popGain.gain.setValueAtTime(0, now + 0.58);
+  popGain.gain.linearRampToValueAtTime(0.15, now + 0.6);
+  popGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.75);
+  pop.connect(popGain).connect(ctx.destination);
+  pop.start(now + 0.58);
+  pop.stop(now + 0.8);
+}
+
 const COLORS = ["#f59e0b", "#10b981", "#3b82f6", "#ec4899", "#8b5cf6", "#facc15"];
 
 // Confetti is a visual reward, not a themeable "sound" — every theme uses
@@ -216,6 +292,12 @@ function activeTheme(): SoundTheme {
   return SOUND_THEMES[getSoundThemeId()] ?? SOUND_THEMES[DEFAULT_THEME_ID];
 }
 
+// Checklist/project completions are infrequent enough that a 1-in-5 surprise
+// won't wear out — goal keeps its own dedicated fanfare untouched, since
+// that's already the rarest, biggest celebration.
+const SURPRISE_CHANCE = 0.2;
+const SURPRISE_TIERS: CelebrationTier[] = ["checklist", "project"];
+
 // `origin` is where the confetti bursts from (usually the clicked element);
 // defaults to upper-middle of the screen when not given.
 // `sound` overrides the tier's own chime (confetti/haptics still scale with
@@ -223,7 +305,8 @@ function activeTheme(): SoundTheme {
 // fanfare but its own distinct sound.
 export function celebrate(tier: CelebrationTier, origin?: { x: number; y: number }, sound?: UiSound) {
   const theme = activeTheme();
-  if (isSoundOn()) (sound ? () => playUiSound(sound) : theme.celebrations[tier])();
+  const surprise = !sound && SURPRISE_TIERS.includes(tier) && Math.random() < SURPRISE_CHANCE;
+  if (isSoundOn()) (sound ? () => playUiSound(sound) : surprise ? playPartyCheer : theme.celebrations[tier])();
   try {
     navigator.vibrate?.(theme.haptics[tier]);
   } catch {
