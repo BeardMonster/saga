@@ -217,6 +217,49 @@ function looksStructured(rawText: string): boolean {
   return lines.length >= 6 || rawText.length > 500;
 }
 
+// The structural splitter below (parseKeepNotes) was built for importing a
+// bulk Google Keep export — several genuinely unrelated notes pasted
+// together, blank-line-separated. Applied blindly to a long paste, it also
+// fires on a SINGLE project brief (a title, a few "Label: description"
+// lines, one numbered task list) and shreds it into one fragment per
+// section instead of recognizing it as one thing — confirmed live with a
+// real "Package & Sell Saga" paste (goal/decision/audience notes + 9 tasks)
+// coming back as 4 disconnected proposals. Ask the model to tell the two
+// shapes apart before deciding which path to take, rather than assuming
+// every long paste is a Keep export.
+async function classifyStructuredPaste(prisma: PrismaClient, rawText: string): Promise<"one_project" | "multiple_notes"> {
+  const prompt =
+    `Below is a block of pasted text. Decide which shape it is:\n` +
+    `- "one_project": it's about ONE thing — a project, plan, or idea with a title, optional descriptive notes ` +
+    `(e.g. "Goal:", "Decision:", "Target audience:" lines), and a list of related sub-tasks/action items. Every ` +
+    `section is part of describing that ONE thing.\n` +
+    `- "multiple_notes": it's actually several unrelated, independent notes that happen to be pasted together (e.g. ` +
+    `a Google Keep export with blank-line-separated notes about different topics with no shared thread).\n\n` +
+    `Respond with ONLY valid JSON of the shape { "shape": "one_project" | "multiple_notes" }.\n\n` +
+    `Text:\n${rawText}`;
+  const result = (await runAiTask(prisma, "inbox_text_triage", prompt)) as { shape?: string };
+  return result.shape === "one_project" ? "one_project" : "multiple_notes";
+}
+
+function buildProjectExtractionPrompt(rawText: string, attempts: Attempt[]): string {
+  return (
+    `Below is a pasted project brief — a title, optional descriptive notes, and a list of sub-tasks. Extract it.\n` +
+    `- name: the project's title.\n` +
+    `- description: the descriptive/context notes (goals, decisions, audience, etc.), combined into a short block of ` +
+    `text — keep it factual, don't summarize away specifics.\n` +
+    `- items: the sub-tasks/action items, one per array entry, command wording trimmed (e.g. "Write documentation", ` +
+    `not "1. Write documentation").\n\n` +
+    `Respond with ONLY valid JSON of the shape { "name": string, "description": string, "items": string[] }.\n\n` +
+    `Text:\n${rawText}` +
+    buildReevaluationSuffix(attempts)
+  );
+}
+
+async function extractProjectFromPaste(prisma: PrismaClient, rawText: string, attempts: Attempt[]): Promise<Proposal> {
+  const fields = await runAiTask(prisma, "inbox_text_triage", buildProjectExtractionPrompt(rawText, attempts));
+  return { targetType: "project_with_items", fields: fields as Record<string, unknown> };
+}
+
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const flattenItem = (i: ParsedItem): string[] => [
@@ -242,6 +285,16 @@ async function processTextEntry(prisma: PrismaClient, entryId: string, userId: s
   const context = await loadTriageContext(prisma);
 
   if (looksStructured(rawText)) {
+    await appendProgress(prisma, entryId, "Checking whether this is one project or several separate notes…");
+    const shape = await classifyStructuredPaste(prisma, rawText);
+
+    if (shape === "one_project") {
+      await appendProgress(prisma, entryId, "Reading it as one project with a description and sub-tasks…");
+      const proposal = await extractProjectFromPaste(prisma, rawText, []);
+      await prisma.inboxEntry.update({ where: { id: entryId }, data: { proposal: proposal as unknown as Prisma.InputJsonValue, status: "pending" } });
+      return;
+    }
+
     const notes = parseKeepNotes(rawText);
     if (notes.length > 0) {
       await appendProgress(prisma, entryId, `Split into ${notes.length} note(s) by its structure — no AI needed.`);
@@ -526,6 +579,10 @@ export async function reevaluateEntry(prisma: PrismaClient, id: string, userFeed
   await prisma.inboxEntry.update({ where: { id }, data: { attempts: attempts as unknown as Prisma.InputJsonValue, status: "processing", progressSteps: [] } });
 
   let fields: unknown;
+  if (entry.kind === "text" && (entry.proposal as { targetType?: string } | null)?.targetType === "project_with_items") {
+    const proposal = await extractProjectFromPaste(prisma, entry.rawText!, attempts);
+    return prisma.inboxEntry.update({ where: { id }, data: { proposal: proposal as unknown as Prisma.InputJsonValue, status: "pending" } });
+  }
   if (entry.kind === "text" && (entry.proposal as { targetType?: string } | null)?.targetType === "recipe") {
     const retry = await runAiTask(
       prisma,
