@@ -14,6 +14,7 @@ const KNOWN_TASK_KEYS = [
   "recipe_photo_structure",
   "recipe_voice_structure",
   "recipe_allergen_scan",
+  "recipe_tag_suggest",
   "insult_extraction",
   "grocery_receipt_vision_extract",
   "grocery_receipt_vision_extract_escalated",

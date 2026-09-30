@@ -61,4 +61,14 @@ export default async function recipeRoutes(server: FastifyInstance) {
     const suggested = await service.scanAllergens(server.prisma, request.body.ingredients);
     return ok(suggested);
   });
+
+  server.post<{ Body: { title: string; ingredients: string[]; instructions?: string } }>("/recipes/suggest-tags", async (request, reply) => {
+    const { title, ingredients } = request.body;
+    if (!title?.trim() || !ingredients?.length) {
+      reply.code(400);
+      return err("title and ingredients are required", 400);
+    }
+    const tags = await service.suggestTags(server.prisma, { title, ingredients, instructions: request.body.instructions ?? "" });
+    return ok(tags);
+  });
 }

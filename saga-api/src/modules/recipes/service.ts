@@ -28,6 +28,21 @@ export async function scanAllergens(prisma: PrismaClient, ingredients: string[])
   return Array.isArray(result.presentAllergens) ? (result.presentAllergens as string[]) : [];
 }
 
+// Same suggestion-only pattern as scanAllergens — merges into the tags
+// field for review, never saves on its own.
+export async function suggestTags(prisma: PrismaClient, input: { title: string; ingredients: string[]; instructions: string }): Promise<string[]> {
+  const prompt =
+    `Suggest 3-6 short, lowercase tags for this recipe — cuisine, meal type, cooking method, or style ` +
+    `(e.g. "grilling", "asian-inspired", "dessert", "one-pot", "weeknight"). Don't just repeat the recipe's own title.\n\n` +
+    `Title: ${input.title}\n` +
+    `Ingredients:\n${input.ingredients.map((i) => `- ${i}`).join("\n")}\n` +
+    (input.instructions.trim() ? `Instructions: ${input.instructions}\n` : "") +
+    `\nRespond with ONLY valid JSON of the shape {"tags": string[]}.`;
+
+  const result = (await runAiTask(prisma, "recipe_tag_suggest", prompt)) as { tags?: unknown };
+  return Array.isArray(result.tags) ? (result.tags as string[]).filter((t) => typeof t === "string") : [];
+}
+
 export async function listRecipes(prisma: PrismaClient) {
   const userId = await getCurrentUserId(prisma);
   return prisma.recipe.findMany({ where: { userId, deletedAt: null }, orderBy: [{ position: "asc" }, { createdAt: "asc" }] });

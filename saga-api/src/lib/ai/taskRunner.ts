@@ -30,6 +30,7 @@ const TASK_DEFAULTS: Record<string, { provider: AiProvider; ollamaModel?: string
   recipe_photo_structure: { provider: "ollama", ollamaModel: "llama3.1:8b" },
   recipe_voice_structure: { provider: "ollama", ollamaModel: "llama3.1:8b" },
   recipe_allergen_scan: { provider: "ollama", ollamaModel: "llama3.1:8b" },
+  recipe_tag_suggest: { provider: "ollama", ollamaModel: "llama3.1:8b" },
   insult_extraction: { provider: "ollama", ollamaModel: "llama3.1:8b" },
   // Same reasoning as recipe_photo_vision_extract — a real photo (lighting,
   // skew, receipt curl) needs a genuine vision model, not OCR-then-guess.

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 
 // Switching to another app (e.g. copying the next chunk from Keep) and back
 // can make a mobile browser reclaim Saga's backgrounded tab — a real reload,
@@ -24,6 +24,34 @@ export function useDraftState(key: string, initial = ""): [string, (value: strin
     try {
       if (value) localStorage.setItem(key, value);
       else localStorage.removeItem(key);
+    } catch {
+      /* storage unavailable — draft just won't survive a reload */
+    }
+  }, [key, value]);
+
+  return [value, setValue];
+}
+
+// Same idea as useDraftState, for a whole form's worth of fields (e.g.
+// RecipeForm's title/ingredients/instructions/etc.) instead of one string.
+// Caller owns making the key collision-free — e.g. a fixed key for "new
+// recipe" and a per-id key for "editing recipe X", so an abandoned edit on
+// one recipe can never bleed into another. Never auto-clears (an object
+// draft has no obvious "empty" state) — clear it explicitly with
+// clearDraft() on a real cancel/success.
+export function useDraftObject<T>(key: string, initial: T): [T, Dispatch<SetStateAction<T>>] {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? (JSON.parse(raw) as T) : initial;
+    } catch {
+      return initial;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
     } catch {
       /* storage unavailable — draft just won't survive a reload */
     }

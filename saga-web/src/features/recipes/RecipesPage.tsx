@@ -11,7 +11,7 @@ import { deleteWithUndo } from "../../core/api/undoableDelete";
 import { useConfirm } from "../../shared/hooks/useConfirm";
 import { SortableList, DragHandle, type SortableHandleProps } from "../../shared/components/SortableList";
 import { COMMON_ALLERGENS } from "../../shared/lib/allergens";
-import { useDraftState } from "../../shared/hooks/useDraftState";
+import { useDraftState, useDraftObject, clearDraft } from "../../shared/hooks/useDraftState";
 
 interface ProgressStep {
   message: string;
@@ -168,16 +168,18 @@ function formValuesToPayload(v: RecipeFormValues) {
 
 function RecipeForm({
   initial,
+  draftKey,
   onSubmit,
   onCancel,
   submitLabel,
 }: {
   initial: RecipeFormValues;
+  draftKey: string;
   onSubmit: (values: RecipeFormValues) => void;
   onCancel?: () => void;
   submitLabel: string;
 }) {
-  const [values, setValues] = useState(initial);
+  const [values, setValues] = useDraftObject(draftKey, initial);
   const set = <K extends keyof RecipeFormValues>(key: K, value: RecipeFormValues[K]) =>
     setValues((v) => ({ ...v, [key]: value }));
 
@@ -216,6 +218,22 @@ function RecipeForm({
     },
   });
 
+  // Same suggestion-only pattern as scanAllergens — merges into the tags
+  // field for review, never saves on its own.
+  const suggestTags = useMutation({
+    mutationFn: () => {
+      const ingredients = values.ingredientsText.split("\n").map((l) => l.trim()).filter(Boolean);
+      return apiPost<string[]>("/recipes/suggest-tags", { title: values.title, ingredients, instructions: values.instructions });
+    },
+    onSuccess: (res) => {
+      const suggested = res.data ?? [];
+      setValues((v) => {
+        const existing = v.tagsText.split(",").map((t) => t.trim()).filter(Boolean);
+        return { ...v, tagsText: Array.from(new Set([...existing, ...suggested])).join(", ") };
+      });
+    },
+  });
+
   return (
     <form
       onSubmit={(e) => {
@@ -237,9 +255,21 @@ function RecipeForm({
       <Field label="Instructions (optional)">
         <Textarea value={values.instructions} onChange={(e) => set("instructions", e.target.value)} minRows={4} />
       </Field>
-      <Field label="Tags (comma separated)">
+      <div className="grid gap-1">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Tags (comma separated)</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => suggestTags.mutate()}
+            disabled={suggestTags.isPending || !values.title.trim() || !values.ingredientsText.trim()}
+          >
+            {suggestTags.isPending ? "Scanning…" : "🔍 Suggest tags"}
+          </Button>
+        </div>
         <Input value={values.tagsText} onChange={(e) => set("tagsText", e.target.value)} placeholder="e.g. dinner, quick" />
-      </Field>
+      </div>
       <div className="grid grid-cols-3 gap-3">
         <Field label="Prep (min)">
           <Input type="number" inputMode="numeric" value={values.prepMinutes} onChange={(e) => set("prepMinutes", e.target.value)} />
@@ -299,10 +329,17 @@ function RecipeCard({
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
+  // Scoped per recipe so an abandoned edit on one recipe can never bleed
+  // into editing a different one.
+  const editDraftKey = `saga-draft-recipe-edit-${recipe.id}`;
 
   const updateRecipe = useMutation({
     mutationFn: (values: RecipeFormValues) => apiPatch(`/recipes/${recipe.id}`, formValuesToPayload(values)),
     onSuccess: () => {
+      // clearDraft (not relying on the form's own persistence effect) since
+      // RecipeForm unmounts in this same update — see clearDraft's own
+      // comment for why that matters.
+      clearDraft(editDraftKey);
       setEditing(false);
       queryClient.invalidateQueries({ queryKey: ["recipes"] });
     },
@@ -312,8 +349,12 @@ function RecipeCard({
     return (
       <RecipeForm
         initial={recipeToFormValues(recipe)}
+        draftKey={editDraftKey}
         onSubmit={(values) => updateRecipe.mutate(values)}
-        onCancel={() => setEditing(false)}
+        onCancel={() => {
+          clearDraft(editDraftKey);
+          setEditing(false);
+        }}
         submitLabel="Save changes"
       />
     );
@@ -417,6 +458,7 @@ function RecipeCard({
 }
 
 const ADD_MODE_KEY = "saga-draft-recipe-add-mode";
+const NEW_RECIPE_DRAFT_KEY = "saga-draft-recipe-new";
 
 export default function RecipesPage() {
   const queryClient = useQueryClient();
@@ -425,16 +467,13 @@ export default function RecipesPage() {
   const [hideAllergens, setHideAllergens] = useState<string[]>([]);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  // Persisted (not just pasteText below) so a mobile tab reload mid-paste
-  // reopens the paste form instead of restoring text into a form that's gone.
-  // "write" mode is deliberately NOT persisted here — RecipeForm's own
-  // fields aren't saved anywhere (reused for editing an existing recipe too,
-  // so a stale draft could bleed into editing a different recipe), so
-  // reopening it after a reload would show an empty form with no memory of
-  // what was typed, which reads as "my recipe vanished" rather than helping.
+  // Persisted so a mobile tab reload mid-write/paste reopens the right form
+  // with its content intact (RecipeForm's own fields are now persisted too,
+  // via NEW_RECIPE_DRAFT_KEY below — see useDraftObject).
   const [addMode, setAddMode] = useState<"menu" | "write" | "paste" | null>(() => {
     try {
-      return localStorage.getItem(ADD_MODE_KEY) === "paste" ? "paste" : null;
+      const saved = localStorage.getItem(ADD_MODE_KEY);
+      return saved === "write" || saved === "paste" ? saved : null;
     } catch {
       return null;
     }
@@ -443,7 +482,7 @@ export default function RecipesPage() {
 
   useEffect(() => {
     try {
-      if (addMode === "paste") localStorage.setItem(ADD_MODE_KEY, "paste");
+      if (addMode === "write" || addMode === "paste") localStorage.setItem(ADD_MODE_KEY, addMode);
       else localStorage.removeItem(ADD_MODE_KEY);
     } catch {
       /* storage unavailable — form just won't reopen after a reload */
@@ -453,6 +492,9 @@ export default function RecipesPage() {
   const closeAdd = () => {
     setAddMode(null);
     setPasteText("");
+    // Synchronous (not relying on RecipeForm's own persistence effect) —
+    // RecipeForm unmounts in this same update once addMode leaves "write".
+    clearDraft(NEW_RECIPE_DRAFT_KEY);
   };
 
   const toggleHideAllergen = (a: string) => {
@@ -611,7 +653,13 @@ export default function RecipesPage() {
           )}
 
           {addMode === "write" && (
-            <RecipeForm initial={emptyFormValues()} onSubmit={(values) => createRecipe.mutate(values)} onCancel={closeAdd} submitLabel="Save recipe" />
+            <RecipeForm
+              initial={emptyFormValues()}
+              draftKey={NEW_RECIPE_DRAFT_KEY}
+              onSubmit={(values) => createRecipe.mutate(values)}
+              onCancel={closeAdd}
+              submitLabel="Save recipe"
+            />
           )}
 
           {addMode === "paste" && (
