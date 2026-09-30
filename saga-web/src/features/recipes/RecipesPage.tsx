@@ -181,6 +181,10 @@ function RecipeForm({
   const set = <K extends keyof RecipeFormValues>(key: K, value: RecipeFormValues[K]) =>
     setValues((v) => ({ ...v, [key]: value }));
 
+  const missing = [!values.title.trim() && "a title", !values.ingredientsText.trim() && "at least one ingredient"].filter(
+    (x): x is string => !!x,
+  );
+
   const toggleAllergen = (a: string) => {
     setValues((v) => ({
       ...v,
@@ -216,20 +220,21 @@ function RecipeForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (values.title.trim() && values.ingredientsText.trim() && values.instructions.trim()) onSubmit(values);
+        if (missing.length === 0) onSubmit(values);
       }}
       className="grid gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4"
     >
-      <Field label="Recipe title">
+      <p className="text-xs text-slate-600 dark:text-slate-400">* required</p>
+      <Field label="Recipe title *">
         <Input value={values.title} onChange={(e) => set("title", e.target.value)} />
       </Field>
       <Field label="Short description (optional)">
         <Input value={values.description} onChange={(e) => set("description", e.target.value)} />
       </Field>
-      <Field label="Ingredients (one per line)">
+      <Field label="Ingredients (one per line) *">
         <Textarea value={values.ingredientsText} onChange={(e) => set("ingredientsText", e.target.value)} minRows={4} />
       </Field>
-      <Field label="Instructions">
+      <Field label="Instructions (optional)">
         <Textarea value={values.instructions} onChange={(e) => set("instructions", e.target.value)} minRows={4} />
       </Field>
       <Field label="Tags (comma separated)">
@@ -267,13 +272,16 @@ function RecipeForm({
           <Input value={values.customAllergensText} onChange={(e) => set("customAllergensText", e.target.value)} placeholder="e.g. sulfites, corn" />
         </Field>
       </fieldset>
+      {missing.length > 0 && <p className="text-xs text-slate-600 dark:text-slate-400">Still needs {missing.join(" and ")}.</p>}
       <div className="flex justify-end gap-2">
         {onCancel && (
           <Button type="button" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
         )}
-        <Button type="submit">{submitLabel}</Button>
+        <Button type="submit" disabled={missing.length > 0}>
+          {submitLabel}
+        </Button>
       </div>
     </form>
   );

@@ -6,7 +6,7 @@ interface RecipeBody {
   title: string;
   description?: string;
   ingredients: string[];
-  instructions: string;
+  instructions?: string;
   tags?: string[];
   prepMinutes?: number;
   cookMinutes?: number;
@@ -22,12 +22,12 @@ export default async function recipeRoutes(server: FastifyInstance) {
   server.get("/recipes", async () => ok(await service.listRecipes(server.prisma)));
 
   server.post<{ Body: RecipeBody }>("/recipes", async (request, reply) => {
-    const { title, ingredients, instructions } = request.body;
-    if (!title?.trim() || !ingredients?.length || !instructions?.trim()) {
+    const { title, ingredients } = request.body;
+    if (!title?.trim() || !ingredients?.length) {
       reply.code(400);
-      return err("title, ingredients, and instructions are required", 400);
+      return err("title and ingredients are required", 400);
     }
-    const recipe = await service.createRecipe(server.prisma, request.body);
+    const recipe = await service.createRecipe(server.prisma, { ...request.body, instructions: request.body.instructions ?? "" });
     reply.code(201);
     return ok(recipe, "Recipe added", 201);
   });
