@@ -419,10 +419,14 @@ export default function RecipesPage() {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   // Persisted (not just pasteText below) so a mobile tab reload mid-paste
   // reopens the paste form instead of restoring text into a form that's gone.
+  // "write" mode is deliberately NOT persisted here — RecipeForm's own
+  // fields aren't saved anywhere (reused for editing an existing recipe too,
+  // so a stale draft could bleed into editing a different recipe), so
+  // reopening it after a reload would show an empty form with no memory of
+  // what was typed, which reads as "my recipe vanished" rather than helping.
   const [addMode, setAddMode] = useState<"menu" | "write" | "paste" | null>(() => {
     try {
-      const saved = localStorage.getItem(ADD_MODE_KEY);
-      return saved === "write" || saved === "paste" ? saved : null;
+      return localStorage.getItem(ADD_MODE_KEY) === "paste" ? "paste" : null;
     } catch {
       return null;
     }
@@ -431,7 +435,7 @@ export default function RecipesPage() {
 
   useEffect(() => {
     try {
-      if (addMode === "write" || addMode === "paste") localStorage.setItem(ADD_MODE_KEY, addMode);
+      if (addMode === "paste") localStorage.setItem(ADD_MODE_KEY, "paste");
       else localStorage.removeItem(ADD_MODE_KEY);
     } catch {
       /* storage unavailable — form just won't reopen after a reload */
