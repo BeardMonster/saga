@@ -108,3 +108,43 @@ export async function getHomeStats(prisma: PrismaClient): Promise<HomeStats> {
     activeGoals,
   };
 }
+
+export interface TodayRecap {
+  items: { title: string; checklistName: string }[];
+  checklists: { name: string }[];
+  projects: { name: string }[];
+}
+
+// The actual titles behind "completedToday" above — a count alone isn't a
+// recap. Goals aren't included: Goal has no achievedAt timestamp (only a
+// status), so there's no way to tell it was achieved specifically TODAY
+// without a schema change, and goal wins already get their own big
+// celebration in the moment.
+export async function getTodayRecap(prisma: PrismaClient): Promise<TodayRecap> {
+  const userId = await getCurrentUserId(prisma);
+  const since = startOfDay(new Date());
+
+  const [items, checklists, projects] = await Promise.all([
+    prisma.checklistItem.findMany({
+      where: { completedAt: { gte: since }, checklist: { userId } },
+      select: { title: true, checklist: { select: { name: true } } },
+      orderBy: { completedAt: "asc" },
+    }),
+    prisma.checklist.findMany({
+      where: { userId, completedAt: { gte: since } },
+      select: { name: true },
+      orderBy: { completedAt: "asc" },
+    }),
+    prisma.project.findMany({
+      where: { userId, completedAt: { gte: since } },
+      select: { name: true },
+      orderBy: { completedAt: "asc" },
+    }),
+  ]);
+
+  return {
+    items: items.map((i) => ({ title: i.title, checklistName: i.checklist.name })),
+    checklists: checklists.map((c) => ({ name: c.name })),
+    projects: projects.map((p) => ({ name: p.name })),
+  };
+}
