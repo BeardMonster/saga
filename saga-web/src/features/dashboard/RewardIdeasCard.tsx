@@ -14,8 +14,8 @@ const IDEAS: { label: string; status: "done" | "next" | "idea" }[] = [
   { label: "Body doubling timer, incl. Race the Clock", status: "done" },
   { label: "A distinct sound for errors / failed saves", status: "done" },
   { label: "Daily \"pick one thing\" suggestion", status: "done" },
-  { label: "Per-checklist progress bar that fills as you go", status: "idea" },
-  { label: "Occasional surprise/bigger celebration, not always the same one", status: "idea" },
+  { label: "Per-checklist progress bar that fills as you go", status: "done" },
+  { label: "Occasional surprise/bigger celebration, not always the same one", status: "done" },
   { label: "\"Quick wins\" filter for 5-minute tasks on low-energy days", status: "done" },
   { label: "Warm end-of-day recap of what got finished", status: "idea" },
 ];

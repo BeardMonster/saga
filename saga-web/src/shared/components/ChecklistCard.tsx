@@ -366,6 +366,23 @@ export default function ChecklistCard({
         </DropdownMenu>
       </h3>
 
+      {checklist.kind !== "note" && checklist.items.length > 0 && (
+        <div className="mb-3">
+          <div className="mb-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+            <span>
+              {complete.length} of {checklist.items.length} done
+            </span>
+            <span>{Math.round((complete.length / checklist.items.length) * 100)}%</span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+            <div
+              className="h-full rounded-full bg-green-500 transition-all duration-300"
+              style={{ width: `${(complete.length / checklist.items.length) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {!open ? (
         <div className="text-sm text-slate-600 dark:text-slate-400">
           {checklist.kind === "note" ? (
