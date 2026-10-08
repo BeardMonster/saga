@@ -50,6 +50,27 @@
     --ring: 215 16% 47%;
   }
 }
+/* Long unbroken strings (URLs, IDs, emails) must never widen the page. On a
+   phone, one overflowing element makes the browser grow the whole layout
+   viewport to fit it — which drags the fixed bottom nav off-screen.
+   - `overflow-wrap: anywhere` (inherited, so it covers every text node in
+     the app, including ones added later) lets any run of text break to fit.
+     Unlike `break-word` it also lowers the element's min-content size, so
+     flex children shrink and wrap without each needing `min-w-0`.
+   - `overflow-x: clip` on the root is a backstop for anything else that
+     overflows (unlike `hidden` it doesn't make a scroll container, so
+     sticky positioning keeps working). Deliberately scrolling strips like
+     ScrollChips have their own overflow container and are unaffected. */
+@layer base {
+  html,
+  body {
+    overflow-x: clip;
+  }
+  body {
+    overflow-wrap: anywhere;
+  }
+}
+
 /* Form controls don't inherit Tailwind's color utilities by default, so
    without this every input/select stays browser-white even in dark mode. */
 .dark input,
