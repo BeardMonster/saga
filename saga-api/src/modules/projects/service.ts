@@ -23,14 +23,16 @@ export async function createProject(
   input: { name: string; description?: string; includeChecklist?: boolean; page?: ProjectPage },
 ) {
   const userId = await getCurrentUserId(prisma);
-  const last = await prisma.project.aggregate({ where: { userId }, _max: { position: true } });
+  // New projects go to the top of the list (one below the current lowest
+  // position; negatives are fine, drag-reorder re-indexes 0..n).
+  const first = await prisma.project.aggregate({ where: { userId }, _min: { position: true } });
   const project = await prisma.project.create({
     data: {
       userId,
       name: input.name,
       description: input.description || undefined,
       page: input.page,
-      position: (last._max.position ?? -1) + 1,
+      position: (first._min.position ?? 1) - 1,
     },
   });
   if (input.includeChecklist) {

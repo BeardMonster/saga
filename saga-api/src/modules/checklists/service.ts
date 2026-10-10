@@ -37,10 +37,14 @@ export async function createChecklist(
   input: { name: string; kind?: ChecklistKind; projectId?: string; description?: string; body?: string },
 ) {
   const userId = await getCurrentUserId(prisma);
-  const last = await prisma.checklist.aggregate({
-    where: { userId, projectId: input.projectId ?? null },
-    _max: { position: true },
-  });
+  const scope = { userId, projectId: input.projectId ?? null };
+  // A new standalone checklist goes to the TOP of its list (one below the
+  // current lowest position — negatives are fine, drag-reorder re-indexes
+  // 0..n anyway). Sections inside a project still append, since they read
+  // top-to-bottom in the order they were added.
+  const position = input.projectId
+    ? ((await prisma.checklist.aggregate({ where: scope, _max: { position: true } }))._max.position ?? -1) + 1
+    : ((await prisma.checklist.aggregate({ where: scope, _min: { position: true } }))._min.position ?? 1) - 1;
   return prisma.checklist.create({
     data: {
       userId,
@@ -49,7 +53,7 @@ export async function createChecklist(
       projectId: input.projectId,
       description: input.description || undefined,
       body: input.body || undefined,
-      position: (last._max.position ?? -1) + 1,
+      position,
     },
   });
 }
