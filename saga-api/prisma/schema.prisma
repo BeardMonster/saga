@@ -251,6 +251,11 @@ model ReminderCascade {
   // — this is what makes a birthday reminder an annual thing rather than a
   // one-shot that needs manually re-triggering every year.
   isRecurringAnnually Boolean     @default(false)
+  // "HH:MM" (24h), read in the app's timezone (process.env.TZ, America/New_York
+  // here) — every instance of this cascade fires at this time of day on its
+  // date. anchorDate stays date-only; the time lives separately so the date
+  // never gets reinterpreted across timezones.
+  fireTime    String              @default("09:00")
   createdAt   DateTime            @default(now())
   deletedAt   DateTime? // soft delete — see Project.deletedAt
   // A one-time removal from the active list, kept forever unless the user
@@ -270,7 +275,13 @@ model ReminderInstance {
   cascade        ReminderCascade @relation(fields: [cascadeId], references: [id])
   fireAt         DateTime
   sentAt         DateTime?
+  // Marked Done — stops all nagging.
   acknowledgedAt DateTime?
+  // Set when snoozed: the next time to re-notify. A reminder that has a
+  // nagAt keeps coming back (every NAG_INTERVAL after each re-send) until
+  // it's marked Done, not just once — for "if I snooze it, don't let me
+  // forget it" (ADHD). Null = not nagging.
+  nagAt          DateTime?
 
   @@map("reminder_instances")
 }
