@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { formatCadenceDays, formatDateOnly } from "../../shared/lib/dates";
+import { formatCadenceDays, formatDateOnly, formatInstant } from "../../shared/lib/dates";
 import { Button } from "@/components/ui/button";
 import BirthdayReminderDialog from "./BirthdayReminderDialog";
 import type { Person, ReminderCascade } from "./types";
@@ -39,7 +39,7 @@ export default function BirthdayReminders({ person, cascade }: { person: Person;
                   instance.sentAt ? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-500" : "bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300"
                 }`}
               >
-                {formatDateOnly(instance.fireAt, { month: "short", day: "numeric" })}
+                {formatInstant(instance.fireAt, { month: "short", day: "numeric" })}
               </li>
             ))}
           </ul>

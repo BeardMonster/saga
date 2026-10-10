@@ -5,7 +5,7 @@ import { EllipsisVertical, Search, Trash2 } from "lucide-react";
 import { apiGet, apiPost, apiPatch } from "../../core/api/client";
 import { deleteWithUndo } from "../../core/api/undoableDelete";
 import { useConfirm } from "../../shared/hooks/useConfirm";
-import { formatDateOnly } from "../../shared/lib/dates";
+import { formatDateOnly, formatInstant } from "../../shared/lib/dates";
 import { SortableList, DragHandle, type SortableHandleProps } from "../../shared/components/SortableList";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
@@ -66,7 +66,7 @@ function PersonCard({
           {person.birthday && (
             <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">
               🎂 {formatDateOnly(person.birthday)}
-              {nextReminder && <span className="text-xs"> · next reminder {formatDateOnly(nextReminder.fireAt, { month: "short", day: "numeric" })}</span>}
+              {nextReminder && <span className="text-xs"> · next reminder {formatInstant(nextReminder.fireAt, { month: "short", day: "numeric" })}</span>}
             </p>
           )}
 

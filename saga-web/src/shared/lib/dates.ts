@@ -32,6 +32,22 @@ export function formatDateOnly(value: string | Date, options: Intl.DateTimeForma
   return new Date(value).toLocaleDateString(undefined, { ...options, timeZone: "UTC" });
 }
 
+// A reminder instance's fireAt is NOT a pure date — it's a real instant
+// (its date plus the reminder's time of day), so unlike formatDateOnly above
+// it's formatted in the viewer's own timezone. Date + time by default.
+export function formatInstant(
+  value: string | Date,
+  options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" },
+): string {
+  return new Date(value).toLocaleString(undefined, options);
+}
+
+// "09:00" (the 24h HH:MM a reminder stores) -> "9:00 AM" in the viewer's locale.
+export function formatTimeOfDay(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  return new Date(2000, 0, 1, h, m).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
 // The offsets Google Calendar's own "add a notification" picker offers for
 // birthdays/annual events, in the order it lists them.
 export const CADENCE_OPTIONS: { label: string; days: number }[] = [

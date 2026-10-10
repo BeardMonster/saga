@@ -4,11 +4,12 @@ import { Archive, ArchiveRestore, EllipsisVertical, Pencil, Trash2 } from "lucid
 import { apiGet, apiPost, apiPatch } from "../../core/api/client";
 import { deleteWithUndo } from "../../core/api/undoableDelete";
 import { useConfirm } from "../../shared/hooks/useConfirm";
-import { DEFAULT_CADENCE_DAYS, formatCadenceDays, formatDateOnly } from "../../shared/lib/dates";
+import { DEFAULT_CADENCE_DAYS, formatCadenceDays, formatDateOnly, formatInstant, formatTimeOfDay } from "../../shared/lib/dates";
 import { Button } from "@/components/ui/button";
 import { CheckboxField, Field, Input } from "@/components/ui/field";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import CadencePicker from "./CadencePicker";
+import OpenRemindersCard from "../dashboard/OpenRemindersCard";
 import { useDraftState } from "../../shared/hooks/useDraftState";
 
 interface ReminderInstance {
@@ -23,7 +24,25 @@ interface ReminderCascade {
   anchorDate: string;
   cadenceDays: number[];
   isRecurringAnnually: boolean;
+  fireTime: string;
   instances: ReminderInstance[];
+}
+
+const DEFAULT_FIRE_TIME = "09:00";
+
+// When in the day it goes off, plus a shortcut for the common one-off case
+// ("remind me once, on the day") so nobody has to think in day-offsets.
+function ReminderTimeField({ time, onTime, onJustOnce }: { time: string; onTime: (t: string) => void; onJustOnce: () => void }) {
+  return (
+    <div className="flex items-end gap-2">
+      <Field label="Remind me at" className="flex-1">
+        <Input type="time" value={time} onChange={(e) => onTime(e.target.value || DEFAULT_FIRE_TIME)} />
+      </Field>
+      <Button type="button" variant="outline" className="shrink-0" onClick={onJustOnce} title="Skip the advance reminders — only remind me on the day">
+        Only on the day
+      </Button>
+    </div>
+  );
 }
 
 // anchorDate is date-only (UTC midnight) — extract with UTC getters so the
@@ -42,6 +61,7 @@ function CascadeCard({ cascade, onArchive, onDelete }: { cascade: ReminderCascad
   const [anchorDate, setAnchorDate] = useState(toDateInputValue(cascade.anchorDate));
   const [cadenceDays, setCadenceDays] = useState(cascade.cadenceDays);
   const [repeatAnnually, setRepeatAnnually] = useState(cascade.isRecurringAnnually);
+  const [fireTime, setFireTime] = useState(cascade.fireTime ?? DEFAULT_FIRE_TIME);
 
   const updateCascade = useMutation({
     mutationFn: () =>
@@ -50,6 +70,7 @@ function CascadeCard({ cascade, onArchive, onDelete }: { cascade: ReminderCascad
         anchorDate: new Date(anchorDate).toISOString(),
         cadenceDays,
         isRecurringAnnually: repeatAnnually,
+        fireTime,
       }),
     onSuccess: () => {
       setEditing(false);
@@ -72,6 +93,7 @@ function CascadeCard({ cascade, onArchive, onDelete }: { cascade: ReminderCascad
         <Field label="Date">
           <Input type="date" value={anchorDate} onChange={(e) => setAnchorDate(e.target.value)} />
         </Field>
+        <ReminderTimeField time={fireTime} onTime={setFireTime} onJustOnce={() => setCadenceDays([0])} />
         <CadencePicker offsets={cadenceDays} onChange={setCadenceDays} />
         <CheckboxField checked={repeatAnnually} onChange={setRepeatAnnually}>
           Repeat every year
@@ -97,7 +119,7 @@ function CascadeCard({ cascade, onArchive, onDelete }: { cascade: ReminderCascad
             {cascade.title} {cascade.isRecurringAnnually && <span className="text-xs font-normal text-slate-600 dark:text-slate-400">🔁 yearly</span>}
           </h3>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">Date: {formatDateOnly(cascade.anchorDate)}</p>
-          <p className="text-xs text-green-700 dark:text-green-400">Reminds: {formatCadenceDays(cascade.cadenceDays)}</p>
+          <p className="text-xs text-green-700 dark:text-green-400">Reminds: {formatCadenceDays(cascade.cadenceDays)} at {formatTimeOfDay(cascade.fireTime ?? DEFAULT_FIRE_TIME)}</p>
         </button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -124,7 +146,7 @@ function CascadeCard({ cascade, onArchive, onDelete }: { cascade: ReminderCascad
             key={instance.id}
             className={`text-xs rounded-full px-2 py-1 ${instance.sentAt ? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400" : "bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300"}`}
           >
-            {formatDateOnly(instance.fireAt, { month: "short", day: "numeric" })} {instance.sentAt ? "· sent" : "· pending"}
+            {formatInstant(instance.fireAt)} {instance.sentAt ? "· sent" : "· pending"}
           </li>
         ))}
       </ul>
@@ -157,6 +179,7 @@ export default function RemindersPage() {
   const [anchorDate, setAnchorDate] = useState("");
   const [cadenceDays, setCadenceDays] = useState<number[]>(DEFAULT_CADENCE_DAYS);
   const [repeatAnnually, setRepeatAnnually] = useState(false);
+  const [fireTime, setFireTime] = useState(DEFAULT_FIRE_TIME);
 
   const { data } = useQuery({
     queryKey: ["reminders"],
@@ -174,12 +197,14 @@ export default function RemindersPage() {
         anchorDate: new Date(anchorDate).toISOString(),
         cadenceDays,
         isRecurringAnnually: repeatAnnually,
+        fireTime,
       }),
     onSuccess: () => {
       setTitle("");
       setAnchorDate("");
       setCadenceDays(DEFAULT_CADENCE_DAYS);
       setRepeatAnnually(false);
+      setFireTime(DEFAULT_FIRE_TIME);
       queryClient.invalidateQueries({ queryKey: ["reminders"] });
     },
   });
@@ -206,8 +231,11 @@ export default function RemindersPage() {
     <div className="max-w-2xl mx-auto p-6 space-y-4">
       <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Reminders</h2>
       <p className="text-slate-600 dark:text-slate-400 text-sm -mt-3">
-        Set the date once — Saga generates the whole reminder chain and pushes each one to your phone via ntfy when it's due.
+        Set the date once — Saga generates the whole reminder chain and pushes each one to your phone via ntfy at the time you pick.
+        Snooze one and it keeps coming back until you mark it done.
       </p>
+
+      <OpenRemindersCard />
 
       <form
         onSubmit={(e) => {
@@ -222,6 +250,7 @@ export default function RemindersPage() {
         <Field label="Date">
           <Input type="date" value={anchorDate} onChange={(e) => setAnchorDate(e.target.value)} />
         </Field>
+        <ReminderTimeField time={fireTime} onTime={setFireTime} onJustOnce={() => setCadenceDays([0])} />
         <CadencePicker offsets={cadenceDays} onChange={setCadenceDays} />
         <CheckboxField checked={repeatAnnually} onChange={setRepeatAnnually}>
           Repeat every year (anniversaries, renewals, etc.)

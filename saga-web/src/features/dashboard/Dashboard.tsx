@@ -6,6 +6,7 @@ import RandomInsultCard from "./RandomInsultCard";
 import DailyPickCard from "./DailyPickCard";
 import QuickWinsCard from "./QuickWinsCard";
 import DayRecapCard from "./DayRecapCard";
+import OpenRemindersCard from "./OpenRemindersCard";
 
 interface HomeStats {
   completedToday: number;
@@ -54,6 +55,7 @@ export default function Dashboard() {
         </>
       )}
 
+      <OpenRemindersCard />
       <DayRecapCard />
       <DailyPickCard />
       <QuickWinsCard />
