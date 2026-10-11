@@ -23,6 +23,7 @@ const primaryLinks: (NavLinkDef & { icon: LucideIcon })[] = [
 ];
 
 const moreLinks: NavLinkDef[] = [
+  { to: "/daily-tasks", label: "Daily Tasks" },
   { to: "/calendar", label: "Calendar" },
   { to: "/reminders", label: "Reminders" },
   { to: "/people", label: "People" },

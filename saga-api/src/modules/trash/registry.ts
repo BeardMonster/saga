@@ -12,6 +12,7 @@ import * as recipes from "../recipes/service.js";
 import * as grocery from "../grocery/service.js";
 import * as personNotes from "../personNotes/service.js";
 import * as insults from "../insults/service.js";
+import * as dailyTasks from "../dailyTasks/service.js";
 
 interface DeletedRow {
   id: string;
@@ -188,5 +189,12 @@ export const TRASH_TYPES: Record<string, TrashTypeConfig> = {
     listDeleted: insults.listDeletedInsults,
     restore: insults.restoreInsult,
     hardDelete: insults.hardDeleteInsult,
+  },
+  daily_task: {
+    label: "Daily task",
+    getTitle: (r) => String(r.title),
+    listDeleted: dailyTasks.listDeletedDailyTasks,
+    restore: dailyTasks.restoreDailyTask,
+    hardDelete: dailyTasks.hardDeleteDailyTask,
   },
 };

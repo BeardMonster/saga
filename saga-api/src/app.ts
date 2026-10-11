@@ -25,6 +25,7 @@ import alertRoutes from "./modules/alerts/routes.js";
 import chatRoutes from "./modules/chat/routes.js";
 import statsRoutes from "./modules/stats/routes.js";
 import insultRoutes from "./modules/insults/routes.js";
+import dailyTaskRoutes from "./modules/dailyTasks/routes.js";
 import dailyPickRoutes from "./modules/dailyPick/routes.js";
 
 const server = Fastify({ logger: true });
@@ -53,6 +54,7 @@ await server.register(personNotesRoutes);
 await server.register(statsRoutes);
 await server.register(insultRoutes);
 await server.register(dailyPickRoutes);
+await server.register(dailyTaskRoutes);
 
 startReminderScheduler(server);
 startTrashScheduler(server);

@@ -40,6 +40,7 @@ model User {
   groceryReceipts GroceryReceipt[]
   groceryReceiptItemAliases GroceryReceiptItemAlias[]
   aiTargetTypeInstructions AiTargetTypeInstruction[]
+  dailyTasks               DailyTask[]
 
   @@map("users")
 }
@@ -973,4 +974,41 @@ model AiTargetTypeInstruction {
 
   @@unique([userId, targetType])
   @@map("ai_target_type_instructions")
+}
+
+// A recurring chore that comes due on certain weekdays and resets every day
+// (feed the cat, check the mail). "Done" isn't stored on the task: each
+// check-off is a DailyTaskCompletion row for that day, so today's status is
+// just "is there a row for today" — nothing has to reset at midnight, and
+// every day it was done is kept for free (streaks / recaps later).
+model DailyTask {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+  title  String
+  // Days it's due, 0 = Sunday … 6 = Saturday (same as JS Date.getDay()).
+  daysOfWeek Int[]
+  // "HH:MM" local time for a reminder on each due day, or null for none.
+  reminderTime String?
+  // The local day a reminder last went out, so it sends once per due day.
+  lastRemindedOn DateTime? @db.Date
+  position       Int       @default(0)
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime? // soft delete — see Project.deletedAt
+
+  completions DailyTaskCompletion[]
+
+  @@map("daily_tasks")
+}
+
+model DailyTaskCompletion {
+  id     String    @id @default(uuid())
+  taskId String
+  task   DailyTask @relation(fields: [taskId], references: [id])
+  // The LOCAL calendar day it was done for (a pure date, not a timestamp).
+  day         DateTime @db.Date
+  completedAt DateTime @default(now())
+
+  @@unique([taskId, day])
+  @@map("daily_task_completions")
 }

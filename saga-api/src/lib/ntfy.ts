@@ -11,13 +11,20 @@ export interface SendOptions {
   // When set (and SAGA_PUBLIC_URL is configured), the notification carries
   // Done / Snooze buttons that call back into the API for this instance.
   instanceId?: string;
+  // A daily task's reminder: carries a single Done button that checks that
+  // task off for today.
+  dailyTaskId?: string;
 }
 
 // ntfy "Actions" header: `http, <label>, <url>, method=POST, clear=true`
 // separated by `;`. clear=true dismisses the notification once tapped.
-function reminderActions(instanceId: string): string | undefined {
+function reminderActions(options: SendOptions): string | undefined {
   if (!PUBLIC_API_URL) return undefined;
-  const base = `${PUBLIC_API_URL}/api/reminders/instances/${instanceId}`;
+  if (options.dailyTaskId) {
+    return `http, Done, ${PUBLIC_API_URL}/api/daily-tasks/${options.dailyTaskId}/complete, method=POST, clear=true`;
+  }
+  if (!options.instanceId) return undefined;
+  const base = `${PUBLIC_API_URL}/api/reminders/instances/${options.instanceId}`;
   return [
     `http, Done, ${base}/done, method=POST, clear=true`,
     `http, Snooze 1h, ${base}/snooze?minutes=60, method=POST, clear=true`,
@@ -38,7 +45,7 @@ export async function sendReminder(title: string, message: string, options: Send
   const safeTitle = title.replace(/[^\x00-\xFF]/g, "").trim() || "Saga";
 
   const headers: Record<string, string> = { Title: safeTitle, Priority: "default" };
-  const actions = options.instanceId ? reminderActions(options.instanceId) : undefined;
+  const actions = reminderActions(options);
   if (actions) headers.Actions = actions;
 
   await fetch(`${NTFY_URL}/${NTFY_TOPIC}`, { method: "POST", headers, body: message });

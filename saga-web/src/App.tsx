@@ -7,6 +7,7 @@ import Dashboard from "./features/dashboard/Dashboard";
 import ProjectsPage from "./features/projects/ProjectsPage";
 import ChecklistsPage from "./features/checklists/ChecklistsPage";
 import GoalsPage from "./features/goals/GoalsPage";
+import DailyTasksPage from "./features/dailyTasks/DailyTasksPage";
 import CalendarPage from "./features/calendar/CalendarPage";
 import RemindersPage from "./features/reminders/RemindersPage";
 import PeoplePage from "./features/people/PeoplePage";
@@ -57,6 +58,7 @@ export default function App() {
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/checklists" element={<ChecklistsPage />} />
             <Route path="/goals" element={<GoalsPage />} />
+            <Route path="/daily-tasks" element={<DailyTasksPage />} />
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/reminders" element={<RemindersPage />} />
             <Route path="/people" element={<PeoplePage />} />
