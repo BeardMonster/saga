@@ -4,6 +4,7 @@ import { apiGet, apiPost, apiDelete, apiPatch } from "../../core/api/client";
 import { deleteWithUndo } from "../../core/api/undoableDelete";
 import { celebrate } from "../lib/celebrate";
 import { useConfirm } from "../hooks/useConfirm";
+import { useAllChecklists } from "../hooks/useAllChecklists";
 import { GOLD_STAR_ICON, TREASURE_CHEST_OPEN_ICON, PIXEL_ICON_CLASS } from "../lib/icons";
 import InlineEditText from "./InlineEditText";
 import ExpandableTitle from "./ExpandableTitle";
@@ -43,14 +44,6 @@ interface ChecklistData {
   items: ChecklistItemData[];
 }
 
-interface ChecklistSummary {
-  id: string;
-  name: string;
-  completedAt: string | null;
-  kind: "generic" | "grocery" | "note";
-  projectId: string | null;
-}
-
 export default function ChecklistCard({
   checklistId,
   dragHandleProps,
@@ -74,11 +67,8 @@ export default function ChecklistCard({
 
   // For the "move to a different checklist" picker — every checklist the
   // user has, so an item can be reassigned to one it didn't start in.
-  const allChecklistsQuery = useQuery({
-    queryKey: ["checklists", "all-for-move"],
-    queryFn: () => apiGet<ChecklistSummary[]>("/checklists"),
-  });
-  const otherChecklists = (allChecklistsQuery.data?.data ?? []).filter((c) => c.id !== checklistId && !c.completedAt);
+  const { data: allChecklists } = useAllChecklists();
+  const otherChecklists = (allChecklists ?? []).filter((c) => c.id !== checklistId && !c.completedAt);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["checklist", checklistId] });

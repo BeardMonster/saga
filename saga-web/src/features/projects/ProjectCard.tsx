@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiGet, apiPost, apiPatch, apiDelete } from "../../core/api/client";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiPost, apiPatch } from "../../core/api/client";
+import { ALL_CHECKLISTS_KEY, useAllChecklists } from "../../shared/hooks/useAllChecklists";
 import { deleteWithUndo } from "../../core/api/undoableDelete";
 import { useConfirm } from "../../shared/hooks/useConfirm";
 import ChecklistCard from "../../shared/components/ChecklistCard";
@@ -13,15 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { SortableList, DragHandle, type SortableHandleProps } from "../../shared/components/SortableList";
-
-interface ChecklistSummary {
-  id: string;
-  name: string;
-  projectId: string | null;
-  completedAt: string | null;
-  kind: "generic" | "grocery" | "note";
-  items: { id: string; title: string; isComplete: boolean }[];
-}
 
 interface Project {
   id: string;
@@ -54,16 +46,14 @@ export default function ProjectCard({
   }, [focusSectionInput, expanded]);
   const [newSectionKind, setNewSectionKind] = useState<"generic" | "note">("generic");
 
-  const { data } = useQuery({
-    queryKey: ["checklists", "project", project.id],
-    queryFn: () => apiGet<ChecklistSummary[]>(`/checklists?projectId=${project.id}`),
-  });
+  // Shared with every other card (one request total) — just this project's rows.
+  const { data: projectChecklists } = useAllChecklists((all) => all.filter((c) => c.projectId === project.id));
 
   const createChecklist = useMutation({
     mutationFn: () => apiPost("/checklists", { name: newChecklistName, kind: newSectionKind, projectId: project.id }),
     onSuccess: () => {
       setNewChecklistName("");
-      queryClient.invalidateQueries({ queryKey: ["checklists", "project", project.id] });
+      queryClient.invalidateQueries({ queryKey: ALL_CHECKLISTS_KEY });
     },
   });
 
@@ -79,9 +69,22 @@ export default function ProjectCard({
 
   const deleteProject = useMutation({
     mutationFn: () => deleteWithUndo(`/projects/${project.id}`, "project", project.id, "Project"),
+    // The card leaves the screen the instant you confirm, not after the
+    // server round trip + list refetch; put it back if the delete fails.
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["projects"] });
+      const previous = queryClient.getQueryData<{ data?: Project[] }>(["projects"]);
+      queryClient.setQueryData<{ data?: Project[] }>(["projects"], (old) =>
+        old ? { ...old, data: (old.data ?? []).filter((p) => p.id !== project.id) } : old,
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(["projects"], context.previous);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
-      queryClient.invalidateQueries({ queryKey: ["checklists"] });
+      queryClient.invalidateQueries({ queryKey: ALL_CHECKLISTS_KEY });
     },
   });
 
@@ -93,7 +96,6 @@ export default function ProjectCard({
       apiPatch(`/projects/${project.id}`, body, "status" in body ? { sound: null } : undefined),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
-      queryClient.invalidateQueries({ queryKey: ["checklists"] });
     },
   });
 
@@ -104,7 +106,7 @@ export default function ProjectCard({
     mutationFn: (page: Project["page"]) => apiPatch<{ unwrappedChecklistId?: string }>(`/projects/${project.id}`, { page }),
     onSuccess: (result, page) => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
-      queryClient.invalidateQueries({ queryKey: ["checklists"] });
+      queryClient.invalidateQueries({ queryKey: ["checklists"] }); // an unwrapped project becomes a standalone checklist
       const unwrapped = result.data?.unwrappedChecklistId;
       notifyMoved(
         `Moved to the ${page === "projects" ? "Projects" : "Checklists"} page`,
@@ -115,10 +117,10 @@ export default function ProjectCard({
 
   const reorderChecklists = useMutation({
     mutationFn: (checklistIds: string[]) => apiPatch("/checklists/reorder", { projectId: project.id, checklistIds }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["checklists", "project", project.id] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ALL_CHECKLISTS_KEY }),
   });
 
-  const allChecklists = data?.data ?? [];
+  const allChecklists = projectChecklists ?? [];
   const checklists = allChecklists.filter((c) => !c.completedAt);
   const completedChecklists = allChecklists.filter((c) => c.completedAt);
   // A few open items pulled from the project's checklist sections, shown
